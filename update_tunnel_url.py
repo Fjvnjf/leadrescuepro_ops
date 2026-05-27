@@ -25,7 +25,7 @@ SITE_INDEX = REPO_DIR / "docs" / "index.html"
 SITE_URL_FILE = REPO_DIR / "docs" / "tunnel_url.txt"
 
 # GitHub Pages URL to check
-PUBLISHED_URL = "https://leadrescuepro.github.io/leadrescuepro_ops/tunnel_url.txt"
+PUBLISHED_URL = "https://fjvnjf.github.io/leadrescuepro_ops/tunnel_url.txt"
 
 
 def run_cmd(cmd, cwd=None, check=True, capture=True):
