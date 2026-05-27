@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LeadRescuePro Caller Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0e17;
+    color: #c8d6e5;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #0f1629 0%, #1a2332 100%);
+    border: 1px solid #1e3a5f;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #00d4ff;
+    text-shadow: 0 0 20px rgba(0,212,255,0.15);
+  }
+  .header .subtitle { font-size: 13px; color: #5a7a9a; margin-top: 2px; }
+  .header-right { text-align: right; }
+  .caller-name {
+    background: #1a2a44;
+    border: 1px solid #2a4a6a;
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: #00d4ff;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .date-badge {
+    background: #1a2a44;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #7a9abb;
+    margin-top: 6px;
+    display: inline-block;
+  }
+
+  /* Stats Bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: linear-gradient(135deg, #111a2e 0%, #0f1629 100%);
+    border: 1px solid #1a2a44;
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-card .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #00d4ff;
+  }
+  .stat-card .label {
+    font-size: 11px;
+    color: #5a7a9a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .stat-card.warn .value { color: #ffa502; }
+  .stat-card.success .value { color: #2ed573; }
+  .stat-card.danger .value { color: #ff4757; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background: #0f1629;
+    border-radius: 10px;
+    padding: 4px;
+    border: 1px solid #1a2a44;
+  }
+  .tab {
+    flex: 1;
+    padding: 10px 16px;
+    text-align: center;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: #5a7a9a;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+  }
+  .tab.active {
+    background: #1a3a5a;
+    color: #00d4ff;
+    box-shadow: 0 0 15px rgba(0,212,255,0.1);
+  }
+  .tab:hover:not(.active) { color: #8aabcc; }
+
+  /* Lead Card */
+  .lead-card {
+    background: linear-gradient(135deg, #111a2e 0%, #0f1629 100%);
+    border: 1px solid #1a2a44;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+  }
+  .lead-card:hover { border-color: #2a4a6a; }
+  .lead-card .business-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8f0fa;
+  }
+  .lead-card .details {
+    font-size: 13px;
+    color: #5a7a9a;
+    margin-top: 4px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .lead-card .details span { white-space: nowrap; }
+  .lead-card .score-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .score-A { background: #1a3a2a; color: #2ed573; }
+  .score-B { background: #1a3a2a; color: #7bed9f; }
+  .score-C { background: #2a2a1a; color: #ffa502; }
+
+  /* Call Action Buttons */
+  .call-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-success { background: #1a5a2a; color: #2ed573; border: 1px solid #2a7a3a; }
+  .btn-success:hover { background: #2a7a3a; }
+  .btn-warn { background: #5a3a1a; color: #ffa502; border: 1px solid #7a4a2a; }
+  .btn-warn:hover { background: #7a4a2a; }
+  .btn-danger { background: #5a1a1a; color: #ff4757; border: 1px solid #7a2a2a; }
+  .btn-danger:hover { background: #7a2a2a; }
+  .btn-info { background: #1a2a5a; color: #00d4ff; border: 1px solid #2a4a7a; }
+  .btn-info:hover { background: #2a4a7a; }
+  .btn-secondary { background: #1a1a2a; color: #7a9abb; border: 1px solid #2a2a4a; }
+  .btn-secondary:hover { background: #2a2a4a; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #111a2e;
+    border: 1px solid #2a4a6a;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 440px;
+    width: 90%;
+  }
+  .modal h3 { color: #00d4ff; font-size: 18px; margin-bottom: 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal label { display: block; font-size: 12px; color: #5a7a9a; margin-bottom: 4px; }
+  .modal input, .modal textarea, .modal select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0a0e17;
+    border: 1px solid #1a2a44;
+    border-radius: 6px;
+    color: #c8d6e5;
+    font-size: 14px;
+  }
+  .modal input:focus, .modal textarea:focus, .modal select:focus {
+    outline: none;
+    border-color: #00d4ff;
+  }
+  .modal textarea { resize: vertical; min-height: 60px; }
+  .modal .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* History Table */
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .history-table th {
+    text-align: left;
+    padding: 10px 12px;
+    color: #5a7a9a;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #1a2a44;
+  }
+  .history-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #0f1a2a;
+  }
+  .history-table tr:hover td { background: #0f1a2a; }
+  .status-loom { color: #2ed573; font-weight: 600; }
+  .status-noanswer { color: #5a7a9a; }
+  .status-callback { color: #ffa502; }
+  .status-dnc { color: #ff4757; }
+  .status-voicemail { color: #7a9abb; }
+  .status-interest { color: #7bed9f; }
+
+  /* Admin view only */
+  .admin-only { display: none; }
+  .view-admin .admin-only { display: block; }
+  .view-admin .caller-only { display: none; }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .header { flex-direction: column; text-align: center; }
+    .header-right { text-align: center; }
+    .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    .history-table { font-size: 12px; }
+    .history-table th, .history-table td { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>LeadRescuePro</h1>
+      <div class="subtitle">Outbound Caller Dashboard</div>
+    </div>
+    <div class="header-right">
+      <div class="caller-name" id="callerDisplay">Caller: Loading...</div>
+      <div class="date-badge" id="dateDisplay"></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('caller')" id="tab-caller">📞 Caller View</button>
+    <button class="tab" onclick="switchTab('admin')" id="tab-admin">👑 Admin View</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card"><div class="value" id="statDials">0</div><div class="label">Dials Today</div></div>
+    <div class="stat-card success"><div class="value" id="statConnects">0</div><div class="label">Connects</div></div>
+    <div class="stat-card"><div class="value" id="statLooms">0</div><div class="label">Looms Sent</div></div>
+    <div class="stat-card danger"><div class="value" id="statDnc">0</div><div class="label">DNC</div></div>
+  </div>
+
+  <!-- CALLER VIEW -->
+  <div id="view-caller">
+    <!-- Lead Queue -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <h3 style="color:#00d4ff; font-size:16px;">🗂️ Today's Lead Queue</h3>
+      <span style="font-size:12px; color:#5a7a9a;" id="queueCount">0 leads remaining</span>
+    </div>
+    <div id="leadQueue"></div>
+    <div id="emptyQueue" style="display:none; text-align:center; padding:40px; color:#5a7a9a;">
+      <div style="font-size:48px; margin-bottom:12px;">✅</div>
+      <div>All leads called for today! Check back tomorrow or request more.</div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div id="view-admin" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <h3 style="color:#00d4ff; font-size:16px;">📊 Call History & Performance</h3>
+      <div>
+        <button class="btn btn-info" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-secondary" onclick="resetToday()">🔄 Reset Today</button>
+      </div>
+    </div>
+    <div class="lead-card" style="padding:16px;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Business</th>
+            <th>City</th>
+            <th>Result</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="5" style="text-align:center; color:#5a7a9a; padding:20px;">No calls logged yet today.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Loom Modal -->
+<div class="modal-overlay" id="loomModal">
+  <div class="modal">
+    <h3>🎥 Log Loom Request</h3>
+    <div class="field">
+      <label>Business Name</label>
+      <input type="text" id="loomBusiness" readonly>
+    </div>
+    <div class="field">
+      <label>Contact Person</label>
+      <input type="text" id="loomContact" placeholder="e.g., John (owner)">
+    </div>
+    <div class="field">
+      <label>Email to Send Loom</label>
+      <input type="email" id="loomEmail" placeholder="owner@plumbing.com" required>
+    </div>
+    <div class="field">
+      <label>Phone (optional)</label>
+      <input type="tel" id="loomPhone" placeholder="(555) 123-4567">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="loomNotes" placeholder="Any key details from the conversation..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeLoomModal()">Cancel</button>
+      <button class="btn btn-success" onclick="saveLoom()">✅ Save & Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- Callback Modal -->
+<div class="modal-overlay" id="callbackModal">
+  <div class="modal">
+    <h3>⏰ Log Callback Request</h3>
+    <div class="field">
+      <label>Business Name</label>
+      <input type="text" id="cbBusiness" readonly>
+    </div>
+    <div class="field">
+      <label>Who Did You Speak To?</label>
+      <input type="text" id="cbPerson" placeholder="e.g., Receptionist / Office manager">
+    </div>
+    <div class="field">
+      <label>Best Time to Call Back</label>
+      <input type="text" id="cbTime" placeholder="e.g., After 2pm / Tomorrow morning">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="cbNotes" placeholder="Any details..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeCallbackModal()">Cancel</button>
+      <button class="btn btn-warn" onclick="saveCallback()">⏰ Save Callback</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== DATA LAYER ==========
+const STORAGE_KEY = 'lrp_caller_data';
+const QUEUE_KEY = 'lrp_lead_queue';
+
+// Default leads (sample — will be replaced with scraper output)
+const DEFAULT_LEADS = [
+  { id: 1, name: "American Rooter & Drain", city: "Caldwell", state: "ID", phone: "208-xxx-5152", score: "C", owner: "Owner" },
+  { id: 2, name: "Master Plumbing", city: "Meridian", state: "ID", phone: "208-xxx-6686", score: "B", owner: "Lance Rackham" },
+  { id: 3, name: "McCrea Heating & Plumbing", city: "Payette", state: "ID", phone: "208-xxx-4407", score: "C", owner: "Gabriel Knickerbocker" },
+  { id: 4, name: "AAA Septic Service Inc.", city: "Marshalltown", state: "IA", phone: "641-xxx-9914", score: "C", owner: "Owner" },
+  { id: 5, name: "All Seasons P & H", city: "Fruitland", state: "ID", phone: "208-xxx-4592", score: "B", owner: "Owner" },
+  { id: 6, name: "Advanced Plumbing", city: "Boise", state: "ID", phone: "208-xxx-2275", score: "B", owner: "Owner" },
+  { id: 7, name: "Quality Plumbing", city: "Denver", state: "CO", phone: "303-xxx-9100", score: "A", owner: "Mike" },
+  { id: 8, name: "Roto-Rooter Plumbing", city: "Phoenix", state: "AZ", phone: "602-xxx-3300", score: "B", owner: "Manager" },
+  { id: 9, name: "Mr. Rooter Plumbing", city: "Dallas", state: "TX", phone: "214-xxx-7700", score: "A", owner: "Owner" },
+  { id: 10, name: "Budget Rooter", city: "Los Angeles", state: "CA", phone: "323-xxx-5500", score: "C", owner: "Owner" }
+];
+
+function getOrInitData() {
+  let raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    const data = { callerName: "Caller", callLog: [], currentDate: new Date().toDateString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return data;
+  }
+  return JSON.parse(raw);
+}
+
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function getLeads() {
+  let raw = localStorage.getItem(QUEUE_KEY);
+  if (!raw) {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(DEFAULT_LEADS));
+    return DEFAULT_LEADS;
+  }
+  return JSON.parse(raw);
+}
+
+function saveLeads(leads) {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(leads));
+}
+
+// ========== STATE ==========
+let currentData = getOrInitData();
+let leads = getLeads();
+let currentLeadId = null;
+
+// ========== INIT ==========
+document.addEventListener('DOMContentLoaded', function() {
+  // Reset stats if new day
+  const today = new Date().toDateString();
+  if (currentData.currentDate !== today) {
+    currentData.callLog = [];
+    currentData.currentDate = today;
+    saveData(currentData);
+  }
+  document.getElementById('dateDisplay').textContent = today;
+
+  // Check if URL has caller name
+  const params = new URLSearchParams(window.location.search);
+  const caller = params.get('caller');
+  if (caller) {
+    currentData.callerName = caller;
+    saveData(currentData);
+  }
+  document.getElementById('callerDisplay').textContent = `Caller: ${currentData.callerName}`;
+
+  renderAll();
+});
+
+// ========== TAB SWITCH ==========
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById('view-caller').style.display = tab === 'caller' ? 'block' : 'none';
+  document.getElementById('view-admin').style.display = tab === 'admin' ? 'block' : 'none';
+  if (tab === 'admin') renderHistory();
+}
+
+// ========== RENDER ==========
+function renderAll() {
+  renderStats();
+  renderLeadQueue();
+}
+
+function renderStats() {
+  const todayLog = currentData.callLog || [];
+  const dials = todayLog.length;
+  const connects = todayLog.filter(c => ['loom','interest','callback','voicemail'].includes(c.result)).length;
+  const looms = todayLog.filter(c => c.result === 'loom').length;
+  const dncs = todayLog.filter(c => c.result === 'dnc').length;
+
+  document.getElementById('statDials').textContent = dials;
+  document.getElementById('statConnects').textContent = connects;
+  document.getElementById('statLooms').textContent = looms;
+  document.getElementById('statDnc').textContent = dncs;
+}
+
+function renderLeadQueue() {
+  const container = document.getElementById('leadQueue');
+  const emptyMsg = document.getElementById('emptyQueue');
+  const countEl = document.getElementById('queueCount');
+
+  if (leads.length === 0) {
+    container.innerHTML = '';
+    emptyMsg.style.display = 'block';
+    countEl.textContent = '0 leads remaining';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+  countEl.textContent = `${leads.length} leads remaining`;
+
+  container.innerHTML = leads.map(lead => `
+    <div class="lead-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div class="business-name">${lead.name} <span class="score-badge score-${lead.score}">${lead.score}</span></div>
+          <div class="details">
+            <span>📍 ${lead.city}, ${lead.state}</span>
+            <span>📞 ${lead.phone}</span>
+            <span>👤 ${lead.owner}</span>
+          </div>
+        </div>
+      </div>
+      <div class="call-actions">
+        <button class="btn btn-success" onclick="openLoomModal(${lead.id})">🎥 Loom Requested</button>
+        <button class="btn btn-info" onclick="logCall(${lead.id},'interest')">💬 Interested</button>
+        <button class="btn btn-warn" onclick="openCallbackModal(${lead.id})">⏰ Callback</button>
+        <button class="btn btn-secondary" onclick="logCall(${lead.id},'voicemail')">📞 Left Voicemail</button>
+        <button class="btn btn-secondary" onclick="logCall(${lead.id},'noanswer')">❌ No Answer</button>
+        <button class="btn btn-danger" onclick="logCall(${lead.id},'dnc')">🚫 DNC</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderHistory() {
+  const body = document.getElementById('historyBody');
+  const log = currentData.callLog || [];
+  if (log.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#5a7a9a; padding:20px;">No calls logged yet today.</td></tr>';
+    return;
+  }
+  const labels = {
+    loom: { text: '🎥 Loom Sent', cls: 'status-loom' },
+    interest: { text: '💬 Interested', cls: 'status-interest' },
+    callback: { text: '⏰ Callback', cls: 'status-callback' },
+    voicemail: { text: '📞 Voicemail', cls: 'status-voicemail' },
+    noanswer: { text: '❌ No Answer', cls: 'status-noanswer' },
+    dnc: { text: '🚫 DNC', cls: 'status-dnc' }
+  };
+  body.innerHTML = log.map((entry, i) => {
+    const l = labels[entry.result] || { text: entry.result, cls: '' };
+    return `<tr>
+      <td>${entry.time}</td>
+      <td>${entry.business}</td>
+      <td>${entry.city}</td>
+      <td class="${l.cls}">${l.text}</td>
+      <td style="color:#5a7a9a; font-size:12px;">${entry.notes || '-'}</td>
+    </tr>`;
+  }).reverse().join('');
+}
+
+// ========== LOG CALL (quick actions) ==========
+function logCall(leadId, result) {
+  const lead = leads.find(l => l.id === leadId);
+  if (!lead) return;
+
+  const data = getOrInitData();
+  data.callLog.push({
+    time: new Date().toLocaleTimeString(),
+    business: lead.name,
+    city: `${lead.city}, ${lead.state}`,
+    result: result,
+    notes: result === 'dnc' ? 'Not interested / DNC' :
+           result === 'noanswer' ? 'No answer' :
+           result === 'voicemail' ? 'Left voicemail' :
+           result === 'interest' ? 'Showed interest' : ''
+  });
+  saveData(data);
+  currentData = data;
+
+  // Remove from queue
+  leads = leads.filter(l => l.id !== leadId);
+  saveLeads(leads);
+
+  renderAll();
+  renderHistory();
+}
+
+// ========== LOOM MODAL ==========
+function openLoomModal(leadId) {
+  currentLeadId = leadId;
+  const lead = leads.find(l => l.id === leadId);
+  document.getElementById('loomBusiness').value = lead.name;
+  document.getElementById('loomContact').value = lead.owner;
+  document.getElementById('loomEmail').value = '';
+  document.getElementById('loomPhone').value = lead.phone;
+  document.getElementById('loomNotes').value = '';
+  document.getElementById('loomModal').classList.add('active');
+}
+
+function closeLoomModal() {
+  document.getElementById('loomModal').classList.remove('active');
+  currentLeadId = null;
+}
+
+function saveLoom() {
+  const lead = leads.find(l => l.id === currentLeadId);
+  if (!lead) return;
+
+  const email = document.getElementById('loomEmail').value.trim();
+  if (!email) {
+    alert('Email is required to send the Loom video.');
+    return;
+  }
+
+  const data = getOrInitData();
+  data.callLog.push({
+    time: new Date().toLocaleTimeString(),
+    business: lead.name,
+    city: `${lead.city}, ${lead.state}`,
+    result: 'loom',
+    notes: `Contact: ${document.getElementById('loomContact').value} | Email: ${email} | Phone: ${document.getElementById('loomPhone').value} | ${document.getElementById('loomNotes').value}`
+  });
+  saveData(data);
+  currentData = data;
+
+  // Remove from queue
+  leads = leads.filter(l => l.id !== currentLeadId);
+  saveLeads(leads);
+
+  closeLoomModal();
+  renderAll();
+  renderHistory();
+}
+
+// ========== CALLBACK MODAL ==========
+function openCallbackModal(leadId) {
+  currentLeadId = leadId;
+  const lead = leads.find(l => l.id === leadId);
+  document.getElementById('cbBusiness').value = lead.name;
+  document.getElementById('cbPerson').value = '';
+  document.getElementById('cbTime').value = '';
+  document.getElementById('cbNotes').value = '';
+  document.getElementById('callbackModal').classList.add('active');
+}
+
+function closeCallbackModal() {
+  document.getElementById('callbackModal').classList.remove('active');
+  currentLeadId = null;
+}
+
+function saveCallback() {
+  const lead = leads.find(l => l.id === currentLeadId);
+  if (!lead) return;
+
+  const data = getOrInitData();
+  data.callLog.push({
+    time: new Date().toLocaleTimeString(),
+    business: lead.name,
+    city: `${lead.city}, ${lead.state}`,
+    result: 'callback',
+    notes: `Spoke to: ${document.getElementById('cbPerson').value} | Best time: ${document.getElementById('cbTime').value} | ${document.getElementById('cbNotes').value}`
+  });
+  saveData(data);
+  currentData = data;
+
+  // Keep in queue (callback means call again)
+  leads = leads.filter(l => l.id !== currentLeadId);
+  saveLeads(leads);
+
+  closeCallbackModal();
+  renderAll();
+  renderHistory();
+}
+
+// ========== ADMIN TOOLS ==========
+function exportCSV() {
+  const log = currentData.callLog || [];
+  if (log.length === 0) { alert('No calls logged yet.'); return; }
+
+  let csv = 'Time,Business,City,Result,Notes\n';
+  log.forEach(e => {
+    csv += `"${e.time}","${e.business}","${e.city}","${e.result}","${(e.notes || '').replace(/"/g,'""')}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lrp-call-log-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function resetToday() {
+  if (!confirm('Reset all of today\'s call data? This cannot be undone.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(QUEUE_KEY);
+  currentData = getOrInitData();
+  leads = getLeads();
+  renderAll();
+  renderHistory();
+  document.getElementById('dateDisplay').textContent = new Date().toDateString();
+}
+
+// ========== KEYBOARD SHORTCUTS ==========
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeLoomModal();
+    closeCallbackModal();
+  }
+});
+</script>
+</body>
+</html>

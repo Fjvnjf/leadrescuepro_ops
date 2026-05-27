@@ -1,0 +1,19 @@
+2026-05-27 02:30:13 - Killed old lt process 67119
+2026-05-27 02:30:13 - Killed old lt process 67137
+2026-05-27 02:30:13 - Killed old lt process 67149
+2026-05-27 02:30:13 - Killed old lt process 67150
+2026-05-27 02:30:13 - Starting localtunnel on port 8643, subdomain=lrp-rt
+2026-05-27 02:30:13 - Tunnel started (PID 68616), URL=https://lrp-rt.loca.lt
+2026-05-27 16:11:42 - Killed old lt process 73040
+2026-05-27 16:11:42 - Killed old lt process 73069
+2026-05-27 16:11:42 - Killed old lt process 73070
+2026-05-27 16:11:42 - Starting localtunnel on port 8643, subdomain=lrp-rt
+2026-05-27 16:11:42 - Tunnel started (PID 73111), URL=https://lrp-rt.loca.lt
+2026-05-27 16:13:24 - Killed old lt process 73154
+2026-05-27 16:13:24 - Killed old lt process 73183
+2026-05-27 16:13:24 - Killed old lt process 73184
+2026-05-27 16:13:24 - Starting localtunnel on port 8643, subdomain=lrp-rt
+2026-05-27 16:13:24 - Tunnel started (PID 73231), URL=https://lrp-rt.loca.lt
+2026-05-27 16:21:24 - Tunnel died (exit code -15), restarting...
+2026-05-27 16:21:24 - Starting localtunnel on port 8643, subdomain=lrp-rt
+2026-05-27 16:21:24 - Tunnel started (PID 73418), URL=https://lrp-rt.loca.lt

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LeadRescuePro Voice</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Montserrat',system-ui,-apple-system,sans-serif;
+  background:radial-gradient(circle at 50% 0%,rgba(66,133,244,.12),transparent 38%),#000;color:#e8eaed;
+  min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:16px;
+  overflow:hidden
+}
+.container{max-width:480px;width:100%;margin:auto;position:relative}
+.container:before{content:'LeadRescuePro • Hermes';display:block;text-align:center;color:#5f6368;font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:18px}
+
+/* ── PIN Gate ── */
+#pg{
+  background:linear-gradient(145deg,#0a0e17,#0f1629);
+  border:1px solid rgba(138,180,248,.18);border-radius:28px;box-shadow:0 24px 80px rgba(0,0,0,.55);padding:48px 24px 36px;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)
+}
+#pg .lk{font-size:48px;margin-bottom:8px}
+#pg h2{font-size:20px;font-weight:700;color:#8ab4f8;margin-bottom:4px;letter-spacing:.5px}
+#pg p{font-size:13px;color:#5a7a9a;margin-bottom:24px;font-weight:400}
+.pg{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
+.pg input{
+  width:60px;height:68px;text-align:center;
+  background:rgba(0,0,0,.4);border:2px solid rgba(0,212,255,.2);border-radius:12px;
+  color:#00d4ff;font-size:30px;font-weight:700;
+  outline:none;transition:border-color .25s,box-shadow .25s;
+  caret-color:#00d4ff
+}
+.pg input:focus{border-color:#00d4ff;box-shadow:0 0 20px rgba(0,212,255,.2)}
+.pg input.f{border-color:#2ed573;box-shadow:0 0 20px rgba(46,213,115,.2)}
+.pe{color:#ff4757;font-size:13px;min-height:20px;margin-bottom:4px;font-weight:500}
+#pg button{
+  width:100%;max-width:200px;padding:14px 0;margin-top:4px;
+  background:linear-gradient(135deg,#00d4ff,#0088cc);
+  border:none;border-radius:12px;color:#000;font-weight:700;
+  font-size:15px;cursor:pointer;letter-spacing:.5px;
+  transition:transform .2s,box-shadow .2s
+}
+#pg button:active{transform:scale(.97)}
+
+/* ── Main UI ── */
+#main{display:none;text-align:center}
+
+/* AI Orb */
+.orb-wrap{position:relative;width:200px;height:200px;margin:0 auto 16px}
+.square{
+  position:relative;width:200px;height:200px;margin:0 auto;
+  display:flex;align-items:center;justify-content:center
+}
+.orb-core{
+  position:absolute;width:120px;height:120px;
+  background:radial-gradient(circle at 40% 35%,rgba(0,212,255,.8),rgba(0,136,204,.4),transparent);
+  border-radius:50%;filter:blur(2px);
+  animation:orbPulse 3s ease-in-out infinite
+}
+.orb-glow{
+  position:absolute;width:160px;height:160px;
+  background:radial-gradient(circle at 50% 50%,rgba(0,212,255,.15),transparent 70%);
+  border-radius:50%;
+  animation:orbGlow 4s ease-in-out infinite reverse
+}
+.orb-highlight{
+  position:absolute;width:90px;height:90px;
+  background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.3),transparent 60%);
+  border-radius:50%;animation:orbShimmer 5s ease-in-out infinite
+}
+@keyframes orbPulse{
+  0%,100%{transform:scale(1);opacity:.8}
+  50%{transform:scale(1.08);opacity:1}
+}
+@keyframes orbGlow{
+  0%,100%{opacity:.4;transform:scale(1)}
+  50%{opacity:.8;transform:scale(1.12)}
+}
+@keyframes orbShimmer{
+  0%,100%{opacity:.3;transform:translate(0,0) scale(1)}
+  50%{opacity:.7;transform:translate(-8px,-5px) scale(1.05)}
+}
+
+/* Speaking animation */
+.orb-speaking .orb-core{animation:orbSpeakCore .6s ease-in-out infinite alternate!important}
+.orb-speaking .orb-glow{animation:orbSpeakGlow .4s ease-in-out infinite alternate!important}
+.orb-speaking .orb-highlight{animation:orbSpeakShimmer .3s ease-in-out infinite alternate!important}
+@keyframes orbSpeakCore{
+  0%{transform:scale(1) translateY(0);opacity:.7}
+  100%{transform:scale(1.15) translateY(-6px);opacity:1}
+}
+@keyframes orbSpeakGlow{
+  0%{opacity:.3;transform:scale(1)}
+  100%{opacity:.9;transform:scale(1.2)}
+}
+@keyframes orbSpeakShimmer{
+  0%{opacity:.2;transform:translate(0,0)}
+  100%{opacity:.6;transform:translate(-10px,-8px)}
+}
+
+/* Status */
+.st{font-size:13px;color:#5a7a9a;margin-bottom:6px;min-height:20px;font-weight:500;letter-spacing:.3px}
+.sl{font-size:11px;color:#3a4a5a;margin-top:8px;font-weight:400}
+.sl.ok{color:#2ed573}
+.sl.no{color:#ff4757}
+.sl.ch{color:#ffa502}
+
+/* Mic button */
+.mb{
+  width:72px;height:72px;border-radius:50%;margin:0 auto 14px;
+  border:2px solid rgba(0,212,255,.3);
+  background:rgba(0,0,0,.5);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .3s;-webkit-tap-highlight-color:transparent
+}
+.mb i{font-size:28px;color:#5a7a9a;transition:color .3s}
+.mb.ac{border-color:#00d4ff;box-shadow:0 0 40px rgba(0,212,255,.25)}
+.mb.ac i{color:#00d4ff}
+.mb.pr{border-color:#ffa502}
+.mb.pr i{color:#ffa502}
+.mb.sp{border-color:#2ed573;box-shadow:0 0 30px rgba(46,213,115,.2)}
+.mb.sp i{color:#2ed573}
+
+/* Mode buttons */
+.cl{display:flex;gap:8px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.cl button{
+  padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04);color:#5a7a9a;font-size:12px;
+  font-family:'Montserrat',sans-serif;font-weight:500;cursor:pointer;
+  transition:all .25s;-webkit-tap-highlight-color:transparent
+}
+.cl button.on{background:rgba(0,212,255,.1);border-color:#00d4ff;color:#00d4ff}
+.cl button.rt{border-color:rgba(46,213,115,.3);color:#5a7a9a}
+.cl button.rt.on{background:rgba(46,213,115,.1);border-color:#2ed573;color:#2ed573}
+
+/* Chat messages */
+.cv{max-height:220px;overflow-y:auto;margin-bottom:10px;text-align:left}
+.cv::-webkit-scrollbar{width:3px}
+.cv::-webkit-scrollbar-thumb{background:rgba(0,212,255,.2);border-radius:2px}
+.ms{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;padding:12px 14px;margin-bottom:8px;
+  font-size:13px;line-height:1.6;font-weight:400
+}
+.ms .lb{font-size:10px;color:#5a7a9a;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px;font-weight:600}
+.ms .tx.u{color:#00d4ff}
+.ms .tx.h{color:#2ed573}
+
+/* Input row */
+.tr{display:flex;gap:8px;margin-top:4px}
+.tr input{
+  flex:1;min-width:0;padding:14px 16px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;
+  color:#c8d6e5;font-size:15px;outline:none;font-family:'Montserrat',sans-serif;font-weight:400
+}
+.tr input:focus{border-color:rgba(0,212,255,.4)}
+.tr button{
+  padding:14px 20px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);
+  border-radius:12px;color:#00d4ff;font-weight:600;font-size:14px;cursor:pointer;
+  font-family:'Montserrat',sans-serif;white-space:nowrap;transition:all .2s
+}
+.tr button:active{transform:scale(.96)}
+
+.mode-label{font-size:11px;color:#3a4a5a;margin-top:10px;letter-spacing:.5px;font-weight:400}
+audio{display:none}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- PIN Gate -->
+  <div id="pg">
+    <div class="lk">🔒</div>
+    <h2>Access Required</h2>
+    <p>Enter PIN to continue</p>
+    <div class="pg" id="pi">
+      <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" class="pd" data-idx="0">
+      <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" class="pd" data-idx="1">
+      <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" class="pd" data-idx="2">
+      <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" class="pd" data-idx="3">
+    </div>
+    <div class="pe" id="pe"></div>
+    <button id="ub">Unlock</button>
+  </div>
+
+  <!-- Main UI -->
+  <div id="main">
+    <!-- AI Orb -->
+    <div class="orb-wrap">
+      <div class="square" id="aiOrb">
+        <span class="orb-core"></span>
+        <span class="orb-glow"></span>
+        <span class="orb-highlight"></span>
+      </div>
+    </div>
+
+    <div class="st" id="lbl">Ready</div>
+    <div class="sl" id="cs">⬤ Connecting...</div>
+
+    <!-- Mic -->
+    <button class="mb" id="mic"><i class="fas fa-microphone"></i></button>
+
+    <!-- Mode buttons -->
+    <div class="cl">
+      <button id="smartToggle" class="on">🧠 Voice ON</button>
+      <button id="rtToggle" class="rt">🎧 Hold-to-Talk</button>
+    </div>
+
+    <!-- Chat -->
+    <div class="cv" id="cv"></div>
+
+    <!-- Input -->
+    <div class="tr">
+      <input type="text" id="ti" placeholder="Type a message..." autocomplete="off" disabled>
+      <button id="sb"><i class="fas fa-paper-plane"></i></button>
+    </div>
+
+    <div class="mode-label" id="modeIndicator">🎙️ Natural Voice Reply</div>
+    <div class="mode-label" id="sysModel">Model: OpenAI Codex via Hermes API</div>
+  </div>
+
+  <audio id="ap"></audio>
+</div>
+
+<script>
+(function(){
+"use strict";
+var P='4791',pg=document.getElementById('pg'),mu=document.getElementById('main');
+var pe=document.getElementById('pe'),ub=document.getElementById('ub');
+var pis=document.querySelectorAll('.pd'),cs=document.getElementById('cs');
+
+// Auto-unlock from localStorage or URL param
+var params=new URLSearchParams(window.location.search);
+if(localStorage.getItem('p')==='ok'||params.get('p')==='4791'){
+  localStorage.setItem('p','ok');boot();
+}else{setupPin();}
+
+function gv(){var v='';for(var i=0;i<pis.length;i++)v+=pis[i].value||'';return v;}
+
+function setupPin(){
+  for(var i=0;i<pis.length;i++){
+    pis[i].addEventListener('input',function(){
+      this.value=this.value.replace(/[^0-9]/g,'');
+      if(this.value.length>1)this.value=this.value.slice(-1);
+      if(this.value){
+        this.classList.add('f');
+        var idx=parseInt(this.getAttribute('data-idx'));
+        if(idx<pis.length-1){pis[idx+1].focus();}else{unlock();}
+      }else{this.classList.remove('f');}
+    });
+    pis[i].addEventListener('keydown',function(e){
+      var idx=parseInt(this.getAttribute('data-idx'));
+      if(e.key==='Backspace'&&!this.value&&idx>0)pis[idx-1].focus();
+      if(e.key==='Enter'||e.key==='Go'||e.key==='Done'){e.preventDefault();unlock();}
+    });
+  }
+  ub.addEventListener('click',function(e){e.preventDefault();unlock();});
+  setTimeout(function(){pis[0].focus();},300);
+}
+
+function unlock(){
+  if(gv()!==P){pe.textContent='Wrong PIN';
+    for(var i=0;i<pis.length;i++){pis[i].value='';pis[i].classList.remove('f');}
+    pis[0].focus();return;
+  }
+  localStorage.setItem('p','ok');boot();
+}
+
+function boot(){
+  pg.style.display='none';mu.style.display='block';
+  document.getElementById('ti').disabled=false;
+  addMsg('h','Hi! I am ready. Tap the mic, speak naturally, and I will answer back with voice.');
+  setSt('i','Ready');
+  checkB();
+  var st=document.getElementById('smartToggle'); if(st){st.textContent='🧠 Voice ON'; st.className='on';}
+  document.getElementById('modeIndicator').textContent='🎙️ Natural Voice Reply';
+}
+
+function $(id){return document.getElementById(id);}
+var dot=null,lbl=$('lbl'),mb=$('mic'),cv=$('cv'),ti=$('ti');
+var orb=document.getElementById('aiOrb');
+var ls=false,pr=false,sp=false,rc=null;
+window._smartMode=true;
+var hs=!!(window.SpeechRecognition||window.webkitSpeechRecognition);
+var ap=document.getElementById('ap');
+var xo=window.location.hostname.indexOf('github.io')!==-1||window.location.hostname.indexOf('pages.dev')!==-1;
+var B='https://lrp-voice.loca.lt';
+var WSBASE='wss://lrp-voice.loca.lt';
+
+function hd(){return{'Content-Type':'application/json','bypass-tunnel-reminder':'true'};}
+
+function setSt(s,t){
+  mb.className='mb';ls=s==='ls';pr=s==='pr';sp=s==='sp';
+  orb.className='square';
+  lbl.textContent=t;
+  if(s==='ls'){mb.classList.add('ac');}
+  else if(s==='pr'){mb.classList.add('pr');}
+  else if(s==='sp'){mb.classList.add('sp');orb.classList.add('orb-speaking');}
+}
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+function addMsg(r,t){
+  var d=document.createElement('div');d.className='ms';
+  var w=r==='u'?'You':'Assistant';
+  d.innerHTML='<div class="lb">'+w+'</div><div class="tx '+(r==='u'?'u':'h')+'">'+esc(t)+'</div>';
+  cv.appendChild(d);cv.scrollTop=cv.scrollHeight;
+}
+
+function spk(t){
+  return new Promise(function(r){
+    if(!t){setSt('i','Ready');r();return;}
+    setSt('sp','Speaking...');
+    var x=new XMLHttpRequest();
+    x.open('POST',B+'/api/tts?_='+Date.now(),true);
+    x.setRequestHeader('Content-Type','application/json');
+    x.setRequestHeader('bypass-tunnel-reminder','true');
+    x.responseType='json';
+    x.onload=function(){
+      if(x.status===200&&x.response&&x.response.audio_url){
+        var u=B+x.response.audio_url;
+        ap.src=u;
+        ap.onended=function(){setSt('i','Ready');r();};
+        ap.onerror=function(){setSt('i','Ready');r();};
+        ap.play().catch(function(){setSt('i','Tap once to hear reply'); mb.onclick=function(e){e.preventDefault(); ap.play().finally(function(){setSt('i','Ready');r();});};});
+      }else{setSt('i','Ready');r();}
+    };
+    x.onerror=function(){setSt('i','Ready');r();};
+    x.send(JSON.stringify({text:t}));
+  });
+}
+
+async function checkB(){
+  cs.textContent='⬤ Connecting...';
+  try{
+    var r=await fetch(B+'/health?_='+Date.now(),{headers:hd()});
+    var ct=r.headers.get('content-type')||'';
+    if(ct.indexOf('json')!==-1&&(await r.json()).status==='ok'){cs.className='sl ok';cs.textContent='⬤ Connected';return;}
+  }catch(e){}
+  cs.className='sl no';cs.textContent='⬤ Reconnecting...';
+  setTimeout(checkB,10000);
+}
+
+async function api(t){
+  setSt('pr','Thinking...');
+  var u=B+'/api/chat?_='+Date.now();
+  var b=JSON.stringify({message:t,session_id:'v_'+Date.now()});
+  for(var i=0;i<3;i++){
+    try{
+      var r=await fetch(u,{method:'POST',headers:hd(),body:b});
+      if(r.headers.get('content-type').indexOf('json')===-1||!r.ok)throw'c';
+      var d=await r.json();
+      cs.className='sl ok';cs.textContent='⬤ Connected';
+      return d.response;
+    }catch(e){
+      if(i<2){await new Promise(function(r){setTimeout(r,2000);});setSt('pr','Retrying...');}
+    }
+  }
+  cs.className='sl no';cs.textContent='⬤ Reconnecting...';
+  setTimeout(checkB,10000);
+  return "Backend offline. I could not reach the voice bridge yet. Try again in a moment.";
+}
+
+async function pns(t){
+  var r=await api(t);
+  addMsg('h',r);
+  if(r.indexOf('offline')===-1)await spk(r);
+}
+
+function stx(){
+  if(pr||sp)return;
+  var t=ti.value.trim();if(!t)return;
+  ti.value='';addMsg('u',t);pns(t);
+}
+
+function tm(){if(ls){sm();}else if(!pr&&!sp){stm();}}
+
+function stm(){
+  if(!hs){setSt('i','Voice not supported');setTimeout(function(){setSt('i','Type');},2000);ti.focus();return;}
+  try{
+    if(window._smartMode){stmSmart();return;}
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    rc=new SR();rc.continuous=false;rc.interimResults=false;rc.lang='en-US';
+    rc.onresult=function(e){var t=e.results[0][0].transcript;addMsg('u',t);pns(t);};
+    rc.onerror=function(e){
+      if(e.error!=='no-speech')setSt('i',e.error==='not-allowed'?'Mic blocked':e.error);
+      setTimeout(function(){if(!pr&&!sp)setSt('i','Ready');},2000);
+    };
+    rc.onend=function(){if(!pr&&!sp)setSt('i','Ready');};
+    rc.start();setSt('i','Listening...');
+  }catch(e){setSt('i','Mic error');setTimeout(function(){setSt('i','Type');},2000);}
+}
+
+var _mr=null,_ac=[],_ss=null;
+function stmSmart(){
+  setSt('i','Listening...');_ac=[];
+  try{
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){
+      _ss=s;_mr=new MediaRecorder(s,{mimeType:'audio/webm;codecs=opus'});
+      _mr.ondataavailable=function(e){if(e.data.size>0)_ac.push(e.data);};
+      _mr.onstop=function(){
+        _ss.getTracks().forEach(function(t){t.stop();});
+        var blob=new Blob(_ac,{type:'audio/webm'});setSt('pr','Transcribing...');
+        var fd=new FormData();fd.append('file',blob,'recording.webm');
+        var xhr=new XMLHttpRequest();
+        xhr.open('POST',B+'/api/transcribe',true);
+        xhr.setRequestHeader('bypass-tunnel-reminder','true');
+        xhr.responseType='json';
+        xhr.onload=function(){
+          if(xhr.status===200&&xhr.response){
+            var t=xhr.response.transcript||xhr.response.whisper_raw||'';
+            if(t){addMsg('u',t);pns(t);}else{setSt('i','Ready');}
+          }else{setSt('i','Ready');}
+        };
+        xhr.onerror=function(){setSt('i','Ready');};
+        xhr.send(fd);
+      };
+      _mr.start();setTimeout(function(){if(_mr&&_mr.state==='recording')_mr.stop();},10000);
+    }).catch(function(){setSt('i','Mic blocked');setTimeout(function(){setSt('i','Type');},2000);});
+  }catch(e){setSt('i','Mic error');setTimeout(function(){setSt('i','Type');},2000);}
+}
+
+function sm(){
+  if(_mr&&_mr.state==='recording'){_mr.stop();_mr=null;return;}
+  if(rc){try{rc.stop();}catch(e){}rc=null;}if(!pr&&!sp)setSt('i','Ready');
+}
+
+// Real-Time
+var _rtr=null,_rts=null,_rtc=[];
+function setupRT(){
+  var m2=document.getElementById('mic');if(!m2)return;
+  m2.replaceWith(m2.cloneNode(true));
+  var m3=document.getElementById('mic');
+  function startRT(){
+    if(!window._rtWs||window._rtWs.readyState!==1){setSt('i','Not connected');return;}
+    _rtc=[];
+    navigator.mediaDevices.getUserMedia({audio:{sampleRate:16000,channelCount:1,echoCancellation:true,noiseSuppression:true}})
+    .then(function(s){
+      _rts=s;_rtr=new MediaRecorder(s,{mimeType:'audio/webm;codecs=opus'});
+      _rtr.ondataavailable=function(e){if(e.data.size>0)_rtc.push(e.data);};
+      _rtr.onstop=function(){
+        _rts.getTracks().forEach(function(t){t.stop();});
+        if(_rtc.length>0){
+          var blob=new Blob(_rtc,{type:'audio/webm'});
+          var reader=new FileReader();
+          reader.onload=function(){
+            if(window._rtWs&&window._rtWs.readyState===1)
+              window._rtWs.send(JSON.stringify({type:'transcribe',audio:reader.result.split(',')[1],format:'webm'}));
+          };
+          reader.readAsDataURL(blob);
+        }else{setSt('i','Hold');}
+      };
+      _rtr.start();setSt('i','Listening...');
+    }).catch(function(){setSt('i','Mic blocked');setTimeout(function(){setSt('i','Type');},2000);});
+  }
+  function stopRT(){if(_rtr&&_rtr.state==='recording'){_rtr.stop();_rtr=null;}}
+  m3.addEventListener('mousedown',function(e){e.preventDefault();startRT();});
+  m3.addEventListener('mouseup',function(e){e.preventDefault();stopRT();});
+  m3.addEventListener('mouseleave',function(e){if(_rtr&&_rtr.state==='recording')stopRT();});
+  m3.addEventListener('touchstart',function(e){e.preventDefault();startRT();});
+  m3.addEventListener('touchend',function(e){e.preventDefault();stopRT();});
+  m3.addEventListener('touchcancel',function(e){if(_rtr&&_rtr.state==='recording')stopRT();});
+  if(window._rtWs){
+    window._rtWs.onmessage=function(e){
+      try{
+        var msg=JSON.parse(e.data);
+        if(msg.type==='transcript'){addMsg('u',msg.text);}
+        else if(msg.type==='reply'){addMsg('h',msg.text);}
+        else if(msg.type==='tts'){
+          var a=document.getElementById('ap');
+          if(a){a.src=B+msg.url;a.onended=function(){setSt('i','Hold');};a.play().catch(function(){setSt('i','Hold');});}
+          setSt('sp','Speaking...');
+        }else if(msg.type==='state'){
+          if(msg.status==='thinking')setSt('pr','Thinking...');
+          else if(msg.status==='done')setSt('i','Hold');
+        }
+      }catch(e){}
+    };
+  }
+}
+
+// Events
+mb.addEventListener('click',function(e){e.preventDefault();tm();});
+mb.addEventListener('touchend',function(e){e.preventDefault();tm();});
+document.getElementById('sb').addEventListener('click',function(e){e.preventDefault();stx();});
+ti.addEventListener('keydown',function(e){if(e.key==='Enter')stx();});
+document.getElementById('smartToggle').addEventListener('click',function(e){
+  e.preventDefault();
+  window._smartMode=!window._smartMode;
+  this.textContent=window._smartMode?'🧠 Voice ON':'⚡ Browser Mic';
+  this.className=window._smartMode?'on':'';
+  document.getElementById('modeIndicator').textContent=window._smartMode?'🎙️ Natural Voice Reply':'⚡ Browser STT';
+});
+document.getElementById('rtToggle').addEventListener('click',function(e){
+  e.preventDefault();
+  window._rtMode=!window._rtMode;
+  this.textContent=window._rtMode?'🟢 RT ON':'🔴 Real-Time';
+  this.className=window._rtMode?'rt on':'rt';
+  if(window._rtMode){
+    document.getElementById('modeIndicator').textContent='🔴 Real-Time Voice';
+    var wsUrl=WSBASE+'/v2/ws';
+    window._rtWs=new WebSocket(wsUrl);
+    window._rtWs.onopen=function(){cs.className='sl ok';cs.textContent='⬤ RT';addMsg('h','Hi! Hold mic to talk, release when done.');setupRT();};
+    window._rtWs.onerror=function(){addMsg('h','RT unavailable.');window._rtMode=false;document.getElementById('rtToggle').textContent='🔴 Real-Time';document.getElementById('rtToggle').className='rt';document.getElementById('modeIndicator').textContent='⚡ Browser STT';};
+    window._rtWs.onclose=function(){if(window._rtMode){cs.className='sl no';cs.textContent='⬤ Disc';}window._rtWs=null;};
+  }else{
+    if(window._rtWs){window._rtWs.close();window._rtWs=null;}
+    document.getElementById('modeIndicator').textContent='⚡ Browser STT';
+    location.reload();
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName!=='INPUT'&&e.code==='Space'){e.preventDefault();tm();}
+});
+})();
+</script>
+</body>
+</html>

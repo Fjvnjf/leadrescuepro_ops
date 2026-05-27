@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LeadRescuePro autonomous ops dashboard</title>
+  <style>
+    :root{
+      --bg:#05070b; --panel:#0b111b; --panel2:#0f1724; --line:#1e2f45;
+      --text:#e8f3ff; --muted:#8aa4bf; --cyan:#39d5ff; --green:#32ff9c;
+      --amber:#ffc857; --red:#ff5d73; --purple:#a78bfa;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at top left,#11294a 0,#05070b 34rem),#05070b;color:var(--text)}
+    .wrap{max-width:1280px;margin:0 auto;padding:28px}
+    .top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}
+    h1{font-size:30px;line-height:1.05;margin:0 0 8px;letter-spacing:-.04em}
+    .sub{color:var(--muted);max-width:760px;font-size:14px}
+    .badge{border:1px solid #24415e;background:rgba(57,213,255,.08);color:var(--cyan);border-radius:999px;padding:8px 12px;font-weight:800;font-size:12px;white-space:nowrap}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+    .card,.panel{border:1px solid var(--line);background:linear-gradient(180deg,rgba(15,23,36,.92),rgba(8,13,22,.92));box-shadow:0 18px 55px rgba(0,0,0,.34);border-radius:20px;padding:18px}
+    .card b{display:block;font-size:24px;margin-bottom:3px}.card span{color:var(--muted);font-size:12px}.green{color:var(--green)}.cyan{color:var(--cyan)}.amber{color:var(--amber)}.red{color:var(--red)}
+    h2{font-size:15px;text-transform:uppercase;letter-spacing:.12em;color:#b9d8f5;margin:0 0 14px}.row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid rgba(142,164,191,.16)}.row:first-of-type{border-top:0}
+    .row small{color:var(--muted)}.pill{border-radius:999px;padding:5px 9px;font-size:11px;font-weight:800;background:#102032;border:1px solid #263b55}.pill.green{background:rgba(50,255,156,.08);border-color:rgba(50,255,156,.4)}.pill.amber{background:rgba(255,200,87,.08);border-color:rgba(255,200,87,.4)}.pill.red{background:rgba(255,93,115,.08);border-color:rgba(255,93,115,.4)}
+    ul{margin:0;padding-left:18px;color:#d8e8f7} li{margin:8px 0;color:#d8e8f7}.muted{color:var(--muted)}
+    .matrix{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.box{border:1px solid rgba(57,213,255,.22);background:rgba(57,213,255,.045);border-radius:16px;padding:14px}.box b{display:block;margin-bottom:7px;color:var(--cyan)}
+    footer{margin-top:16px;color:var(--muted);font-size:12px;text-align:center}
+    @media(max-width:900px){.grid,.cards,.matrix{grid-template-columns:1fr}.top{display:block}.badge{display:inline-block;margin-top:12px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>LeadRescuePro autonomous ops dashboard</h1>
+        <div class="sub">A dark command view for safe work I can do without Fahim: drafts, trackers, public research, reports, reminders, and blockers. No posting, DMs, account recovery, OTP/CAPTCHA, payments, or identity steps happen without approval.</div>
+      </div>
+      <div class="badge">Updated 2026-05-21 07:00 +06</div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><b class="green">3</b><span>active scheduled jobs found</span></div>
+      <div class="card"><b class="cyan">2</b><span>dashboards/assets now found</span></div>
+      <div class="card"><b class="amber">0</b><span>public posts sent without approval</span></div>
+      <div class="card"><b class="red">0</b><span>cold DMs or pitches sent</span></div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Autonomous work status</h2>
+        <div class="row"><div><b>Daily operations report</b><br><small>Runs at 8:00 AM Bangladesh time, reports back to WhatsApp.</small></div><span class="pill green">active</span></div>
+        <div class="row"><div><b>Overnight safe work loop</b><br><small>Runs every 30 minutes until its run count completes. Safe/offline mode only.</small></div><span class="pill green">active</span></div>
+        <div class="row"><div><b>10-platform check-in</b><br><small>Reminds/targets transparent account prep, not stealth posting.</small></div><span class="pill green">active</span></div>
+        <div class="row"><div><b>Safe autonomous scope file</b><br><small>Written to /home/hermeseassistant/leadrescuepro_ops/00_safe_autonomous_scope.md</small></div><span class="pill green">created</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Hard safety rails</h2>
+        <ul>
+          <li>No posting, commenting, joining groups, follows, DMs, or outreach without Fahim approval.</li>
+          <li>No fake personal identity. Use CallOps Help or LeadRescuePro Community.</li>
+          <li>No OTP, CAPTCHA, payment, account recovery, or owner-login steps without Fahim.</li>
+          <li>No guaranteed revenue, fake proof, fake case studies, or made-up metrics.</li>
+          <li>No links on new community profiles unless platform-specific approval is given.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="grid" style="margin-top:16px">
+      <section class="panel">
+        <h2>What I can keep producing alone</h2>
+        <div class="matrix">
+          <div class="box"><b>Profile assets</b><span class="muted">Bios, usernames, setup checklists, transparent positioning, avatar prompts.</span></div>
+          <div class="box"><b>Content drafts</b><span class="muted">Posts, comments, FAQs, onboarding copy, plumbing call-handling tips.</span></div>
+          <div class="box"><b>Research notes</b><span class="muted">Public pain-signal collection from visible pages only. No contact.</span></div>
+          <div class="box"><b>Reports</b><span class="muted">Daily status, blockers, next actions, and approval queues.</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Current dashboard inventory</h2>
+        <div class="row"><div><b>Business dashboard</b><br><small>/home/hermeseassistant/leadrescuepro-business-dashboard.html</small></div><span class="pill amber">existing</span></div>
+        <div class="row"><div><b>Autonomous ops dashboard</b><br><small>/home/hermeseassistant/leadrescuepro_ops/leadrescuepro-autonomous-ops-dashboard.html</small></div><span class="pill green">new</span></div>
+      </section>
+    </div>
+
+    <footer>LeadRescuePro: practical missed-call recovery for plumbers. Relationship-first. No hype.</footer>
+  </div>
+</body>
+</html>
