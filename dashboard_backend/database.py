@@ -85,6 +85,27 @@ class Commission(Base):
     caller = relationship("User", back_populates="commissions")
 
 
+class Client(Base):
+    __tablename__ = "clients"
+    id = Column(Integer, primary_key=True, index=True)
+    business_name = Column(String(200), nullable=False, index=True)
+    owner_name = Column(String(120), nullable=True)
+    phone = Column(String(30), nullable=True)
+    email = Column(String(200), nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(20), default="TX")
+    onboarding_stage = Column(String(50), default="new")
+    subscription_status = Column(String(30), default="active")
+    setup_fee = Column(Float, default=997.0)
+    monthly_revenue = Column(Float, default=499.0)
+    usage_minutes = Column(Integer, default=0)
+    usage_rate = Column(Float, default=0.5)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    churned_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Recording(Base):
     __tablename__ = "recordings"
     id = Column(Integer, primary_key=True, index=True)

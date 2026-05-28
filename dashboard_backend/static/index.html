@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LeadRescuePro Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #02040a;
+      --panel: #07101b;
+      --panel-2: #0a1726;
+      --cyan: #31d7ff;
+      --green: #2dff9a;
+      --amber: #ffd166;
+      --red: #ff416d;
+      --lime: #b7ff36;
+      --muted: #7d9bb7;
+      --line: #173653;
+      --text: #e8f8ff;
+      --soft: #a6bfd4;
+      --shadow: 0 0 34px rgba(49, 215, 255, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html { min-height: 100%; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        linear-gradient(rgba(49, 215, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(49, 215, 255, 0.045) 1px, transparent 1px),
+        radial-gradient(circle at 14% 10%, rgba(49, 215, 255, 0.18), transparent 28rem),
+        radial-gradient(circle at 88% 18%, rgba(45, 255, 154, 0.1), transparent 24rem),
+        var(--bg);
+      background-size: 42px 42px, 42px 42px, auto, auto, auto;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .login {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1.25rem;
+    }
+
+    .login-card {
+      width: min(430px, 100%);
+      padding: 1.3rem;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(7, 16, 27, 0.92);
+      box-shadow: var(--shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1.15rem;
+    }
+
+    .brand img {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+    }
+
+    .brand h1, .brand p {
+      margin: 0;
+    }
+
+    .brand h1 {
+      font-size: 1.2rem;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .field {
+      display: grid;
+      gap: 0.35rem;
+      margin-bottom: 0.85rem;
+    }
+
+    label {
+      color: var(--soft);
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.7rem 0.82rem;
+      color: var(--text);
+      background: #030912;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 3px rgba(49, 215, 255, 0.13);
+    }
+
+    .btn {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.7rem 0.9rem;
+      color: var(--text);
+      background: #0b1a2b;
+      cursor: pointer;
+      font-weight: 900;
+    }
+
+    .btn.primary {
+      border-color: rgba(49, 215, 255, 0.8);
+      color: #00111b;
+      background: linear-gradient(135deg, var(--cyan), var(--green));
+      box-shadow: 0 0 24px rgba(49, 215, 255, 0.18);
+    }
+
+    .btn.danger {
+      border-color: rgba(255, 65, 109, 0.55);
+      color: #ffdbe4;
+    }
+
+    .msg {
+      min-height: 1.3rem;
+      margin-top: 0.75rem;
+      color: var(--amber);
+      font-weight: 700;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 1rem;
+      border-right: 1px solid var(--line);
+      background: rgba(2, 4, 10, 0.88);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav {
+      display: grid;
+      gap: 0.45rem;
+      margin-top: 1rem;
+    }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 0.7rem 0.8rem;
+      color: var(--soft);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 900;
+    }
+
+    .tab-btn.active {
+      border-color: rgba(49, 215, 255, 0.45);
+      color: var(--cyan);
+      background: rgba(49, 215, 255, 0.08);
+      box-shadow: inset 0 0 22px rgba(49, 215, 255, 0.08);
+    }
+
+    .role-pill {
+      display: inline-flex;
+      width: fit-content;
+      margin-top: 0.75rem;
+      padding: 0.28rem 0.55rem;
+      border: 1px solid rgba(45, 255, 154, 0.35);
+      border-radius: 999px;
+      color: var(--green);
+      font-size: 0.75rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 1rem 1rem 5rem;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      padding: 0.8rem 0;
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: clamp(1.4rem, 4vw, 2.3rem);
+      letter-spacing: 0;
+    }
+
+    .topbar p {
+      margin: 0.2rem 0 0;
+      color: var(--muted);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 800;
+    }
+
+    .pulse {
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 18px var(--green);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(7, 16, 27, 0.86);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card.pad { padding: 1rem; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+
+    .kpi-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .kpi-value {
+      margin-top: 0.35rem;
+      color: var(--text);
+      font-size: clamp(1.8rem, 7vw, 3.1rem);
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .kpi-note {
+      margin-top: 0.6rem;
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.9rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .card-head h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .card-head span {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 0.78rem 1rem;
+      border-bottom: 1px solid rgba(23, 54, 83, 0.72);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border: 1px solid rgba(49, 215, 255, 0.3);
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      color: var(--cyan);
+      background: rgba(49, 215, 255, 0.07);
+      font-size: 0.72rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .pill.green { color: var(--green); border-color: rgba(45, 255, 154, 0.35); }
+    .pill.amber { color: var(--amber); border-color: rgba(255, 209, 102, 0.35); }
+    .pill.red { color: var(--red); border-color: rgba(255, 65, 109, 0.35); }
+    .pill.lime { color: var(--lime); border-color: rgba(183, 255, 54, 0.35); }
+
+    .list {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .list li {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid rgba(23, 54, 83, 0.72);
+    }
+
+    .list li:last-child { border-bottom: 0; }
+    .muted { color: var(--muted); }
+    .strong { font-weight: 900; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.8rem;
+    }
+
+    .form-grid .full { grid-column: 1 / -1; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .bars {
+      display: grid;
+      gap: 0.8rem;
+      padding: 1rem;
+    }
+
+    .bar-row {
+      display: grid;
+      gap: 0.32rem;
+    }
+
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--soft);
+      font-weight: 800;
+      font-size: 0.86rem;
+    }
+
+    .track {
+      height: 12px;
+      border-radius: 999px;
+      background: #06111e;
+      overflow: hidden;
+    }
+
+    .fill {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--cyan), var(--green));
+      min-width: 3px;
+    }
+
+    .mobile-tabs {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      gap: 0.25rem;
+      padding: 0.45rem;
+      border-top: 1px solid var(--line);
+      background: rgba(2, 4, 10, 0.94);
+      overflow-x: auto;
+    }
+
+    .mobile-tabs .tab-btn {
+      flex: 0 0 auto;
+      min-width: 92px;
+      justify-content: center;
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 1050px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .mobile-tabs { display: flex; }
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (max-width: 640px) {
+      .main { padding: 0.8rem 0.8rem 5rem; }
+      .grid { gap: 0.75rem; }
+      .card { border-radius: 14px; }
+      .form-grid { grid-template-columns: 1fr; }
+      table { min-width: 720px; }
+      .brand h1 { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginView" class="login">
+    <form id="loginForm" class="login-card">
+      <div class="brand">
+        <img src="assets/leadrescuepro-logo-180x180.jpg" alt="LeadRescuePro">
+        <div>
+          <h1>LeadRescuePro</h1>
+          <p>Cold calling command center</p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" value="admin" required>
+      </div>
+      <div class="field">
+        <label for="pin">4-digit PIN</label>
+        <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" required>
+      </div>
+      <button class="btn primary" type="submit">Enter Dashboard</button>
+      <div id="loginMessage" class="msg"></div>
+    </form>
+  </section>
+
+  <section id="appView" class="app" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/leadrescuepro-logo-180x180.jpg" alt="LeadRescuePro">
+        <div>
+          <h1>LRP Console</h1>
+          <p id="userLabel">Signed in</p>
+        </div>
+      </div>
+      <span id="rolePill" class="role-pill">admin</span>
+      <nav id="sideNav" class="nav"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">Overview</h2>
+          <p id="pageSubtitle">Live SDR activity, prospects, revenue, and execution queue.</p>
+        </div>
+        <div class="status">
+          <span class="pulse"></span>
+          <span id="apiStatus">Checking API</span>
+          <button id="refreshBtn" class="btn" type="button">Refresh</button>
+          <button id="logoutBtn" class="btn danger" type="button">Logout</button>
+        </div>
+      </header>
+
+      <section id="overview" class="tab-panel active">
+        <div class="grid">
+          <article class="card pad span-3"><div class="kpi-label">Dials today</div><div id="kpiDials" class="kpi-value">0</div><div class="kpi-note" id="kpiConnectRate">0% connect</div></article>
+          <article class="card pad span-3"><div class="kpi-label">Connects</div><div id="kpiConnects" class="kpi-value">0</div><div class="kpi-note">Permission calls count as connects</div></article>
+          <article class="card pad span-3"><div class="kpi-label">Interested</div><div id="kpiInterested" class="kpi-value">0</div><div class="kpi-note">Loom permission target</div></article>
+          <article class="card pad span-3"><div class="kpi-label">DNC rate</div><div id="kpiDnc" class="kpi-value">0%</div><div class="kpi-note">Quality guardrail</div></article>
+          <article class="card span-7">
+            <div class="card-head"><h3>Recent activity</h3><span>Last 20 calls</span></div>
+            <ul id="activityList" class="list"></ul>
+          </article>
+          <article class="card span-5">
+            <div class="card-head"><h3>Daily summary</h3><span>Auto-generated</span></div>
+            <div class="pad">
+              <p id="dailySummary" class="strong">No calls logged yet.</p>
+              <div id="topCallers" class="bars"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="calllog" class="tab-panel">
+        <div class="grid">
+          <form id="callForm" class="card pad span-6">
+            <h3>Log a call</h3>
+            <div class="form-grid">
+              <div class="field full"><label>Business</label><input name="business_name" list="prospectNames" required></div>
+              <div class="field"><label>Phone</label><input name="phone"></div>
+              <div class="field"><label>Disposition</label><select name="disposition"><option value="voicemail">Voicemail</option><option value="no_answer">No Answer</option><option value="talked_interested">Talked - Interested</option><option value="talked_not_interested">Talked - Not Interested</option><option value="callback_set">Callback Set</option><option value="dnc">DNC</option><option value="wrong_number">Wrong Number</option></select></div>
+              <div class="field"><label>Duration seconds</label><input name="duration_seconds" type="number" min="0" value="0"></div>
+              <div class="field full"><label>Notes</label><textarea name="notes"></textarea></div>
+            </div>
+            <button class="btn primary" type="submit">Save Call</button>
+            <div id="callMessage" class="msg"></div>
+          </form>
+          <article class="card span-6">
+            <div class="card-head"><h3>Today</h3><span>Newest first</span></div>
+            <ul id="todayCalls" class="list"></ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="prospects" class="tab-panel">
+        <div class="card pad">
+          <div class="form-grid">
+            <div class="field"><label>Search</label><input id="prospectSearch" placeholder="Business name"></div>
+            <div class="field"><label>Status</label><select id="prospectStatus"><option value="">All</option><option value="pending">Pending</option><option value="called">Called</option><option value="contacted">Contacted</option><option value="callback_set">Callback set</option><option value="dnc">DNC</option></select></div>
+          </div>
+        </div>
+        <div class="card table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Score</th><th>Status</th><th>Last contact</th></tr></thead><tbody id="prospectRows"></tbody></table></div>
+      </section>
+
+      <section id="callers" class="tab-panel">
+        <div class="grid">
+          <form id="callerForm" class="card pad span-4 admin-only">
+            <h3>Add SDR</h3>
+            <div class="field"><label>Username</label><input name="username" required></div>
+            <div class="field"><label>Full name</label><input name="full_name" required></div>
+            <div class="field"><label>PIN</label><input name="pin" maxlength="4" inputmode="numeric" required></div>
+            <button class="btn primary" type="submit">Create Caller</button>
+            <div id="callerMessage" class="msg"></div>
+          </form>
+          <div class="card table-wrap span-8"><table><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Today</th><th>Connect rate</th></tr></thead><tbody id="callerRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="weekly" class="tab-panel">
+        <article class="card">
+          <div class="card-head"><h3>7-day performance</h3><span>Dials and connects</span></div>
+          <div id="weeklyBars" class="bars"></div>
+        </article>
+      </section>
+
+      <section id="commissions" class="tab-panel">
+        <div class="grid">
+          <form id="commissionForm" class="card pad span-4 admin-only">
+            <h3>Add commission</h3>
+            <div class="field"><label>Caller ID</label><input name="caller_id" type="number" required></div>
+            <div class="field"><label>Deal amount</label><input name="deal_amount" type="number" value="1496"></div>
+            <div class="field"><label>Commission</label><input name="commission_amount" type="number" value="100"></div>
+            <button class="btn primary" type="submit">Add</button>
+            <div id="commissionMessage" class="msg"></div>
+          </form>
+          <div class="card span-8 table-wrap"><table><thead><tr><th>Caller</th><th>Deals</th><th>Total</th><th>Paid</th></tr></thead><tbody id="commissionSummary"></tbody></table></div>
+          <div class="card span-12 table-wrap"><table><thead><tr><th>ID</th><th>Caller</th><th>Deal</th><th>Commission</th><th>Status</th><th>Date</th></tr></thead><tbody id="commissionRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="scraper" class="tab-panel">
+        <form id="scraperForm" class="card pad">
+          <h3>Scrape plumber leads</h3>
+          <div class="form-grid">
+            <div class="field"><label>City</label><input name="city" value="Austin" required></div>
+            <div class="field"><label>State</label><input name="state" value="TX" maxlength="2" required></div>
+            <div class="field"><label>Limit</label><input name="limit" type="number" min="1" max="100" value="30"></div>
+          </div>
+          <button class="btn primary" type="submit">Run Scraper</button>
+          <div id="scraperMessage" class="msg"></div>
+        </form>
+      </section>
+
+      <section id="clients" class="tab-panel">
+        <div class="grid">
+          <form id="clientForm" class="card pad span-4 admin-only">
+            <h3>Add client</h3>
+            <div class="field"><label>Business</label><input name="business_name" required></div>
+            <div class="field"><label>Owner</label><input name="owner_name"></div>
+            <div class="field"><label>MRR</label><input name="monthly_revenue" type="number" value="499"></div>
+            <div class="field"><label>Stage</label><select name="onboarding_stage"><option value="new">New</option><option value="voice_setup">Voice setup</option><option value="routing">Routing</option><option value="live">Live</option></select></div>
+            <button class="btn primary" type="submit">Save Client</button>
+            <div id="clientMessage" class="msg"></div>
+          </form>
+          <div class="card span-8 table-wrap"><table><thead><tr><th>Client</th><th>Owner</th><th>Stage</th><th>Status</th><th>MRR</th></tr></thead><tbody id="clientRows"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="revenue" class="tab-panel">
+        <div class="grid">
+          <article class="card pad span-3"><div class="kpi-label">MRR</div><div id="revMrr" class="kpi-value">$0</div></article>
+          <article class="card pad span-3"><div class="kpi-label">Clients</div><div id="revClients" class="kpi-value">0</div></article>
+          <article class="card pad span-3"><div class="kpi-label">ARPU</div><div id="revArpu" class="kpi-value">$0</div></article>
+          <article class="card pad span-3"><div class="kpi-label">Churn</div><div id="revChurn" class="kpi-value">0%</div></article>
+        </div>
+      </section>
+
+      <section id="social" class="tab-panel">
+        <article class="card">
+          <div class="card-head"><h3>Content calendar</h3><span>Atlas Social view</span></div>
+          <ul id="socialList" class="list">
+            <li><span class="pill cyan">Mon</span> Missed-call cost post - Facebook and Instagram</li>
+            <li><span class="pill green">Tue</span> SDR Loom permission script clip - LinkedIn</li>
+            <li><span class="pill amber">Wed</span> Callback checklist carousel - Instagram</li>
+            <li><span class="pill lime">Thu</span> Plumbing owner objection post - Facebook</li>
+            <li><span class="pill red">Fri</span> Weekly proof snapshot - hold for approval</li>
+          </ul>
+        </article>
+      </section>
+      <datalist id="prospectNames"></datalist>
+    </main>
+    <nav id="mobileNav" class="mobile-tabs"></nav>
+  </section>
+
+  <script>
+    const TOKEN_KEY = "lrp_dashboard_token";
+    const USER_KEY = "lrp_dashboard_user";
+    const API_BASE = location.hostname.includes("github.io") ? "https://lrp-dash.loca.lt/api" : "/api";
+    const tabs = [
+      ["overview", "Overview", "Live SDR activity, prospects, revenue, and execution queue.", "all"],
+      ["calllog", "Call Log", "Log calls fast and keep the day clean.", "all"],
+      ["prospects", "Prospects", "Search and work the lead database.", "all"],
+      ["callers", "Callers", "Manage SDRs and performance.", "admin"],
+      ["weekly", "Weekly", "Seven-day operating trend.", "all"],
+      ["commissions", "Commissions", "Track closed deals and payouts.", "all"],
+      ["scraper", "Scraper", "Generate new plumber leads.", "admin"],
+      ["clients", "Clients", "Client onboarding and subscription status.", "admin"],
+      ["revenue", "Revenue", "MRR, ARPU, churn, and payout picture.", "admin"],
+      ["social", "Social", "Weekly organic content view.", "admin"]
+    ];
+    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [] };
+
+    const $ = (id) => document.getElementById(id);
+    const money = (n) => "$" + Number(n || 0).toLocaleString();
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+    const disp = (s) => String(s || "").replaceAll("_", " ");
+
+    async function api(path, options = {}) {
+      const headers = { "abypass-tunnel-reminder": "1", ...(options.headers || {}) };
+      if (state.token) headers.Authorization = "Bearer " + state.token;
+      if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
+      const res = await fetch(API_BASE + path, { ...options, headers });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      return res.json();
+    }
+
+    function showApp() {
+      $("loginView").hidden = true;
+      $("appView").hidden = false;
+      $("userLabel").textContent = state.user?.full_name || state.user?.username || "Signed in";
+      $("rolePill").textContent = state.user?.role || "caller";
+      document.querySelectorAll(".admin-only").forEach(el => el.hidden = state.user?.role !== "admin");
+      renderNav();
+      refreshAll();
+    }
+
+    function renderNav() {
+      const visible = tabs.filter(t => t[3] === "all" || state.user?.role === "admin");
+      for (const target of [$("sideNav"), $("mobileNav")]) {
+        target.innerHTML = visible.map(([id, label]) => `<button class="tab-btn ${id === "overview" ? "active" : ""}" data-tab="${id}" type="button">${label}</button>`).join("");
+      }
+      document.querySelectorAll(".tab-btn").forEach(btn => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
+    }
+
+    function activateTab(id) {
+      const meta = tabs.find(t => t[0] === id);
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === id));
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
+      $("pageTitle").textContent = meta?.[1] || "Dashboard";
+      $("pageSubtitle").textContent = meta?.[2] || "";
+      refreshTab(id);
+    }
+
+    async function refreshAll() {
+      try {
+        $("apiStatus").textContent = "API online";
+        await Promise.all([loadOverview(), loadProspects(), loadWeekly()]);
+        if (state.user?.role === "admin") await Promise.all([loadCallers(), loadCommissions(), loadClients(), loadRevenue()]);
+      } catch (err) {
+        $("apiStatus").textContent = "API issue";
+        console.error(err);
+      }
+    }
+
+    function refreshTab(id) {
+      const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue };
+      if (map[id]) map[id]().catch(err => { $("apiStatus").textContent = err.message; });
+    }
+
+    async function loadOverview() {
+      const k = await api("/kpis/dashboard");
+      $("kpiDials").textContent = k.dials_today || 0;
+      $("kpiConnects").textContent = k.connects_today || 0;
+      $("kpiInterested").textContent = k.looms_sent_today || 0;
+      $("kpiDnc").textContent = (k.dnc_rate || 0) + "%";
+      $("kpiConnectRate").textContent = (k.connect_rate || 0) + "% connect";
+      $("activityList").innerHTML = (k.recent_activity || []).map(a => `<li><div class="strong">${esc(a.business_name || "Unknown")} <span class="pill">${esc(a.disposition)}</span></div><div class="muted">${esc(a.caller_name)} - ${esc(a.time)}</div></li>`).join("") || `<li class="muted">No calls yet.</li>`;
+      $("topCallers").innerHTML = (k.top_callers || []).map(c => `<div class="bar-row"><div class="bar-label"><span>${esc(c.name)}</span><span>${c.dials} dials</span></div><div class="track"><span class="fill" style="width:${Math.min(100, c.connect_rate || 0)}%"></span></div></div>`).join("");
+      if (state.user?.role === "admin") {
+        const s = await api("/kpis/daily-summary").catch(() => null);
+        if (s) $("dailySummary").textContent = s.text_block;
+      }
+      await loadTodayCalls();
+    }
+
+    async function loadTodayCalls() {
+      const data = await api("/calls/today");
+      $("todayCalls").innerHTML = (data.calls || []).map(c => `<li><div class="strong">${esc(c.business_name)} <span class="pill amber">${esc(disp(c.disposition))}</span></div><div class="muted">${esc(c.phone)} - ${esc(c.notes || "")}</div></li>`).join("") || `<li class="muted">Nothing logged today.</li>`;
+    }
+
+    async function loadProspects() {
+      const params = new URLSearchParams();
+      if ($("prospectSearch").value) params.set("search", $("prospectSearch").value);
+      if ($("prospectStatus").value) params.set("status", $("prospectStatus").value);
+      const data = await api("/prospects?" + params.toString());
+      state.prospects = data.prospects || [];
+      $("prospectNames").innerHTML = state.prospects.map(p => `<option value="${esc(p.business_name)}">`).join("");
+      $("prospectRows").innerHTML = state.prospects.map(p => `<tr><td class="strong">${esc(p.business_name)}</td><td>${esc(p.phone)}</td><td>${esc(p.city || "")}, ${esc(p.state || "")}</td><td><span class="pill ${p.score === "A" ? "green" : p.score === "C" ? "red" : "amber"}">${esc(p.score || "B")}</span></td><td>${esc(p.status)}</td><td>${esc(p.last_contact || "-")}</td></tr>`).join("");
+    }
+
+    async function loadCallers() {
+      if (state.user?.role !== "admin") return;
+      const data = await api("/callers");
+      const rows = await Promise.all((data.callers || []).map(async c => {
+        const k = await api(`/kpis/caller/${c.id}`).catch(() => ({}));
+        return `<tr><td class="strong">${esc(c.full_name)}</td><td>${esc(c.username)}</td><td><span class="pill green">Active</span></td><td>${k.dials_today || 0}</td><td>${k.connect_rate || 0}%</td></tr>`;
+      }));
+      $("callerRows").innerHTML = rows.join("");
+    }
+
+    async function loadWeekly() {
+      const data = await api("/kpis/weekly");
+      const max = Math.max(1, ...(data.days || []).map(d => d.dials));
+      $("weeklyBars").innerHTML = (data.days || []).map(d => `<div class="bar-row"><div class="bar-label"><span>${d.day} ${d.date}</span><span>${d.dials} dials / ${d.connects} connects</span></div><div class="track"><span class="fill" style="width:${Math.max(3, d.dials / max * 100)}%"></span></div></div>`).join("");
+    }
+
+    async function loadCommissions() {
+      const [list, summary] = await Promise.all([api("/commissions"), api("/commissions/summary")]);
+      $("commissionSummary").innerHTML = (summary.summary || []).map(s => `<tr><td>${esc(s.name)}</td><td>${s.total_deals}</td><td>${money(s.total_commission)}</td><td>${s.paid_count}</td></tr>`).join("");
+      $("commissionRows").innerHTML = (list.commissions || []).map(c => `<tr><td>${c.id}</td><td>${c.caller_id}</td><td>${money(c.deal_amount)}</td><td>${money(c.commission_amount)}</td><td><span class="pill ${c.status === "paid" ? "green" : "amber"}">${esc(c.status)}</span></td><td>${esc(c.deal_date || "")}</td></tr>`).join("");
+    }
+
+    async function loadClients() {
+      if (state.user?.role !== "admin") return;
+      const data = await api("/clients");
+      $("clientRows").innerHTML = (data.clients || []).map(c => `<tr><td class="strong">${esc(c.business_name)}</td><td>${esc(c.owner_name || "")}</td><td><span class="pill">${esc(c.onboarding_stage)}</span></td><td>${esc(c.subscription_status)}</td><td>${money(c.monthly_revenue)}</td></tr>`).join("");
+    }
+
+    async function loadRevenue() {
+      if (state.user?.role !== "admin") return;
+      const r = await api("/revenue");
+      $("revMrr").textContent = money(r.mrr);
+      $("revClients").textContent = r.active_clients || 0;
+      $("revArpu").textContent = money(r.arpu);
+      $("revChurn").textContent = (r.churn_rate || 0) + "%";
+    }
+
+    function formData(form) {
+      return Object.fromEntries(new FormData(form).entries());
+    }
+
+    $("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("loginMessage").textContent = "Checking PIN...";
+      try {
+        const data = await api("/auth/login", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        state.token = data.access_token;
+        state.user = data.user;
+        localStorage.setItem(TOKEN_KEY, state.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(state.user));
+        showApp();
+      } catch (err) {
+        $("loginMessage").textContent = err.message;
+      }
+    });
+
+    $("callForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = formData(e.currentTarget);
+      payload.duration_seconds = Number(payload.duration_seconds || 0);
+      const saved = await api("/calls/log", { method: "POST", body: JSON.stringify(payload) });
+      $("callMessage").textContent = "Saved call #" + saved.id;
+      e.currentTarget.reset();
+      loadOverview();
+    });
+
+    $("callerForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await api("/callers", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+      $("callerMessage").textContent = "Caller created.";
+      e.currentTarget.reset();
+      loadCallers();
+    });
+
+    $("commissionForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await api("/commissions", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+      $("commissionMessage").textContent = "Commission added.";
+      loadCommissions();
+    });
+
+    $("scraperForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("scraperMessage").textContent = "Scraper running...";
+      const result = await api("/scraper/run", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+      $("scraperMessage").textContent = `Imported ${result.imported} leads for ${result.city}, ${result.state}.`;
+      loadProspects();
+    });
+
+    $("clientForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await api("/clients", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+      $("clientMessage").textContent = "Client saved.";
+      e.currentTarget.reset();
+      loadClients();
+      loadRevenue();
+    });
+
+    $("prospectSearch").addEventListener("input", () => loadProspects().catch(console.error));
+    $("prospectStatus").addEventListener("change", () => loadProspects().catch(console.error));
+    $("refreshBtn").addEventListener("click", refreshAll);
+    $("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      location.reload();
+    });
+
+    if (state.token && state.user) {
+      api("/auth/me").then((user) => { state.user = user; showApp(); }).catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      });
+    }
+    setInterval(() => { if (!$("appView").hidden) loadOverview().catch(console.error); }, 30000);
+  </script>
+</body>
+</html>

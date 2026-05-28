@@ -6,6 +6,9 @@ import os
 import json
 import uuid
 import logging
+import csv
+import io
+import subprocess
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 
@@ -16,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 
-from database import init_db, get_db, User, Prospect, CallLog, Commission, Recording
+from database import init_db, get_db, User, Prospect, CallLog, Commission, Recording, Client
 from auth import verify_pin, hash_pin, create_access_token, get_current_user, require_admin
 
 # ── Setup ────────────────────────────────────────────────────────────────
@@ -25,6 +28,7 @@ DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
+PROJECT_DIR = BASE_DIR.parent
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -40,11 +44,27 @@ app = FastAPI(title="LeadRescuePro Dashboard", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://fjvnjf.github.io",
+        "https://fjvnjf.github.io/lrp-dashboard-frontend",
+        "https://lrp-dash.loca.lt",
+        "http://localhost:8650",
+        "http://127.0.0.1:8650",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "abypass-tunnel-reminder", "authorization", "content-type"],
 )
+
+@app.middleware("http")
+async def localtunnel_bypass_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["abypass-tunnel-reminder"] = "1"
+    response.headers["x-lrp-api"] = "leadrescuepro-dashboard"
+    return response
+
+if (BASE_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(BASE_DIR / "assets")), name="assets")
 
 # ── Whisper Service (lazy loaded) ──────────────────────────────────────
 _whisper_model = None
@@ -85,6 +105,29 @@ def serialize(obj):
         return cols
     return obj
 
+def serialize_user(user: User):
+    data = serialize(user)
+    data.pop("pin_hash", None)
+    return data
+
+def utc_day_bounds(days_ago: int = 0):
+    """Return naive UTC start/end datetimes for SQLite comparisons."""
+    target = datetime.now(timezone.utc).date() - timedelta(days=days_ago)
+    start = datetime(target.year, target.month, target.day)
+    return start, start + timedelta(days=1)
+
+def score_for_lead(rating, reviews):
+    try:
+        rating_val = float(rating or 0)
+        reviews_val = int(float(reviews or 0))
+    except (TypeError, ValueError):
+        return "B"
+    if rating_val >= 4.5 and reviews_val >= 50:
+        return "A"
+    if rating_val < 4.0 or reviews_val < 10:
+        return "C"
+    return "B"
+
 # ── Startup ──────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
@@ -108,11 +151,11 @@ async def login(request: Request, username: str = Form(None), pin: str = Form(No
     if not user.active:
         raise HTTPException(status_code=403, detail="Account inactive")
     token = create_access_token({"user_id": user.id, "role": user.role, "sub": user.username})
-    return {"access_token": token, "token_type": "bearer", "user": serialize(user)}
+    return {"access_token": token, "token_type": "bearer", "user": serialize_user(user)}
 
 @app.get("/api/auth/me")
 def get_me(user: User = Depends(get_current_user)):
-    return serialize(user)
+    return serialize_user(user)
 
 # ── Prospect Routes ──────────────────────────────────────────────────────
 @app.get("/api/prospects")
@@ -324,9 +367,7 @@ def list_calls(
     if caller_id and user.role == "admin":
         query = query.filter(CallLog.caller_id == caller_id)
     if date_filter == "today":
-        now_utc = datetime.now(timezone.utc)
-        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow_start = today_start + timedelta(days=1)
+        today_start, tomorrow_start = utc_day_bounds()
         query = query.filter(CallLog.call_time >= today_start, CallLog.call_time < tomorrow_start)
     elif date_filter:
         try:
@@ -341,9 +382,7 @@ def list_calls(
 
 @app.get("/api/calls/today")
 def today_calls(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now_utc = datetime.now(timezone.utc)
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_start = today_start + timedelta(days=1)
+    today_start, tomorrow_start = utc_day_bounds()
     query = db.query(CallLog).filter(
         CallLog.caller_id == user.id,
         CallLog.call_time >= today_start,
@@ -360,14 +399,12 @@ def export_calls(
 ):
     query = db.query(CallLog)
     if date == "today":
-        now_utc = datetime.now(timezone.utc)
-        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow_start = today_start + timedelta(days=1)
+        today_start, tomorrow_start = utc_day_bounds()
         query = query.filter(CallLog.call_time >= today_start, CallLog.call_time < tomorrow_start)
     elif date:
         try:
             d = datetime.fromisoformat(date).date()
-            d_start = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+            d_start = datetime(d.year, d.month, d.day)
             d_end = d_start + timedelta(days=1)
             query = query.filter(CallLog.call_time >= d_start, CallLog.call_time < d_end)
         except:
@@ -416,9 +453,7 @@ def transcribe_call(call_id: int, db: Session = Depends(get_db), user: User = De
 # ── KPI Routes ──────────────────────────────────────────────────────────
 @app.get("/api/kpis/dashboard")
 def dashboard_kpis(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now_utc = datetime.now(timezone.utc)
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_start = today_start + timedelta(days=1)
+    today_start, tomorrow_start = utc_day_bounds()
     
     base = db.query(CallLog).filter(CallLog.call_time >= today_start, CallLog.call_time < tomorrow_start)
     if user.role != "admin":
@@ -517,8 +552,8 @@ def weekly_kpis(db: Session = Depends(get_db), user: User = Depends(get_current_
         base = base.filter(CallLog.caller_id == user.id)
     
     for i in range(6, -1, -1):
-        d = datetime.now(timezone.utc).date() - timedelta(days=i)
-        d_start = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+        d = datetime.utcnow().date() - timedelta(days=i)
+        d_start = datetime(d.year, d.month, d.day)
         d_end = d_start + timedelta(days=1)
         day_data = base.filter(CallLog.call_time >= d_start, CallLog.call_time < d_end)
         days.append({
@@ -534,9 +569,7 @@ def weekly_kpis(db: Session = Depends(get_db), user: User = Depends(get_current_
 def caller_kpis(caller_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if user.role != "admin" and user.id != caller_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    today = datetime.now(timezone.utc).date()
-    today_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
-    tomorrow_start = today_start + timedelta(days=1)
+    today_start, tomorrow_start = utc_day_bounds()
     
     base = db.query(CallLog).filter(
         CallLog.caller_id == caller_id,
@@ -562,9 +595,7 @@ def caller_kpis(caller_id: int, db: Session = Depends(get_db), user: User = Depe
 
 @app.get("/api/kpis/daily-summary")
 def daily_summary(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    now_utc = datetime.now(timezone.utc)
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_start = today_start + timedelta(days=1)
+    today_start, tomorrow_start = utc_day_bounds()
     
     base = db.query(CallLog).filter(
         CallLog.call_time >= today_start, CallLog.call_time < tomorrow_start
@@ -661,28 +692,33 @@ def update_commission(comm_id: int, data: dict, db: Session = Depends(get_db), u
 
 @app.get("/api/commissions/summary")
 def commission_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    query = db.query(
-        Commission.caller_id, User.full_name,
-        func.count(Commission.id).label("total_deals"),
-        func.sum(Commission.commission_amount).label("total_commission"),
-        func.sum(func.cast(Commission.status == "paid", func.INTEGER)).label("paid_count"),
-    ).join(User, Commission.caller_id == User.id)
-    
+    query = db.query(Commission).join(User, Commission.caller_id == User.id)
     if user.role != "admin":
         query = query.filter(Commission.caller_id == user.id)
-    
-    rows = query.group_by(Commission.caller_id).all()
-    summary = []
+
+    grouped = {}
+    for commission in query.all():
+        caller = commission.caller
+        key = commission.caller_id
+        if key not in grouped:
+            grouped[key] = {
+                "caller_id": key,
+                "name": (caller.full_name or caller.username) if caller else f"Caller {key}",
+                "total_deals": 0,
+                "total_commission": 0.0,
+                "paid_count": 0,
+            }
+        grouped[key]["total_deals"] += 1
+        grouped[key]["total_commission"] += float(commission.commission_amount or 0)
+        if commission.status == "paid":
+            grouped[key]["paid_count"] += 1
+
     grand_total = 0
-    for r in rows:
-        total = float(r.total_commission or 0)
-        summary.append({
-            "caller_id": r.caller_id,
-            "name": r.full_name or f"Caller {r.caller_id}",
-            "total_deals": r.total_deals or 0,
-            "total_commission": round(total, 2),
-            "paid_count": r.paid_count or 0,
-        })
+    summary = []
+    for item in grouped.values():
+        total = item["total_commission"]
+        item["total_commission"] = round(total, 2)
+        summary.append(item)
         grand_total += total
     
     return {"summary": summary, "grand_total": round(grand_total, 2)}
@@ -793,30 +829,208 @@ def caller_performance(caller_id: int, db: Session = Depends(get_db), user: User
         "recent_calls": recent_calls,
     }
 
+# ── Client & Revenue Routes ─────────────────────────────────────────────
+@app.get("/api/clients")
+def list_clients(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    clients = db.query(Client).order_by(Client.created_at.desc()).all()
+    return {"clients": [serialize(c) for c in clients]}
+
+@app.post("/api/clients")
+def create_client(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    business_name = (data.get("business_name") or "").strip()
+    if not business_name:
+        raise HTTPException(status_code=400, detail="business_name required")
+    client = Client(
+        business_name=business_name,
+        owner_name=data.get("owner_name", ""),
+        phone=data.get("phone", ""),
+        email=data.get("email", ""),
+        city=data.get("city", ""),
+        state=data.get("state", "TX"),
+        onboarding_stage=data.get("onboarding_stage", "new"),
+        subscription_status=data.get("subscription_status", "active"),
+        setup_fee=float(data.get("setup_fee", 997.0) or 0),
+        monthly_revenue=float(data.get("monthly_revenue", 499.0) or 0),
+        usage_minutes=int(data.get("usage_minutes", 0) or 0),
+        usage_rate=float(data.get("usage_rate", 0.5) or 0),
+        notes=data.get("notes", ""),
+    )
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+    return serialize(client)
+
+@app.patch("/api/clients/{client_id}")
+def update_client(client_id: int, data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    for key, value in data.items():
+        if hasattr(Client, key) and key != "id":
+            setattr(client, key, value)
+    if data.get("subscription_status") == "churned" and not client.churned_at:
+        client.churned_at = datetime.utcnow()
+    db.commit()
+    db.refresh(client)
+    return serialize(client)
+
+@app.get("/api/revenue")
+def revenue_metrics(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    clients = db.query(Client).all()
+    active = [c for c in clients if c.subscription_status == "active"]
+    churned = [c for c in clients if c.subscription_status == "churned"]
+    mrr = sum(float(c.monthly_revenue or 0) + float(c.usage_minutes or 0) * float(c.usage_rate or 0) for c in active)
+    setup_total = sum(float(c.setup_fee or 0) for c in clients)
+    commission_pending = db.query(func.sum(Commission.commission_amount)).filter(Commission.status != "paid").scalar() or 0
+    commission_paid = db.query(func.sum(Commission.commission_amount)).filter(Commission.status == "paid").scalar() or 0
+    total_clients = len(clients)
+    churn_rate = round(len(churned) / total_clients * 100, 1) if total_clients else 0
+    arpu = round(mrr / len(active), 2) if active else 0
+    return {
+        "mrr": round(mrr, 2),
+        "active_clients": len(active),
+        "total_clients": total_clients,
+        "churned_clients": len(churned),
+        "churn_rate": churn_rate,
+        "arpu": arpu,
+        "setup_revenue_total": round(setup_total, 2),
+        "commission_pending": round(float(commission_pending), 2),
+        "commission_paid": round(float(commission_paid), 2),
+        "clients": [serialize(c) for c in clients],
+    }
+
+@app.get("/api/reports/daily")
+def daily_report(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    today_start, tomorrow_start = utc_day_bounds()
+    calls = db.query(CallLog).filter(CallLog.call_time >= today_start, CallLog.call_time < tomorrow_start)
+    dials = calls.count()
+    connects = calls.filter(CallLog.disposition.in_(CONNECT_DISPOSITIONS)).count()
+    interested = calls.filter(CallLog.disposition == "talked_interested").count()
+    callbacks = calls.filter(CallLog.disposition == "callback_set").count()
+    dnc = calls.filter(CallLog.disposition == "dnc").count()
+    top = db.query(
+        CallLog.caller_id, User.full_name, func.count(CallLog.id).label("dials")
+    ).join(User, CallLog.caller_id == User.id).filter(
+        CallLog.call_time >= today_start,
+        CallLog.call_time < tomorrow_start,
+    ).group_by(CallLog.caller_id).order_by(func.count(CallLog.id).desc()).first()
+    top_line = f"Top caller: {(top.full_name or top.caller_id) if top else 'N/A'} with {top.dials if top else 0} dials."
+    report = (
+        f"LeadRescuePro Daily SDR Report - {today_start.date().isoformat()}\n"
+        f"Dials: {dials}\nConnects: {connects}\nInterested/Loom permission: {interested}\n"
+        f"Callbacks set: {callbacks}\nDNC: {dnc}\n{top_line}"
+    )
+    return {
+        "date": today_start.date().isoformat(),
+        "dials": dials,
+        "connects": connects,
+        "interested": interested,
+        "callbacks": callbacks,
+        "dnc": dnc,
+        "text": report,
+    }
+
 # ── Health ───────────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
-# ── Leads Scrape (Placeholder) ───────────────────────────────────────────
+# ── Leads Scrape ─────────────────────────────────────────────────────────
 @app.post("/api/leads/scrape")
-def scrape_leads(data: dict, user: User = Depends(require_admin)):
-    city = data.get("city", "")
-    state = data.get("state", "")
-    return {"status": "queued", "city": city, "state": state}
+@app.post("/api/scraper/run")
+def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    city = (data.get("city") or "").strip()
+    state = (data.get("state") or "TX").strip().upper()
+    limit = int(data.get("limit", 30) or 30)
+    if not city:
+        raise HTTPException(status_code=400, detail="city required")
+
+    scraper = PROJECT_DIR / "prospect-scraper.js"
+    if not scraper.exists():
+        raise HTTPException(status_code=500, detail="prospect-scraper.js not found")
+
+    try:
+        completed = subprocess.run(
+            ["node", str(scraper), city, state, str(limit)],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Node.js is required to run the scraper")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Scraper timed out")
+
+    if completed.returncode != 0 and not completed.stdout.strip():
+        raise HTTPException(status_code=500, detail=completed.stderr[-800:] or "Scraper failed")
+
+    imported = 0
+    reader = csv.DictReader(io.StringIO(completed.stdout))
+    for row in reader:
+        business_name = row.get("business_name") or row.get("name") or "Unknown"
+        phone = row.get("phone", "")
+        existing = db.query(Prospect).filter(Prospect.business_name == business_name, Prospect.phone == phone).first()
+        if existing:
+            continue
+        prospect = Prospect(
+            business_name=business_name,
+            phone=phone,
+            city=city,
+            state=state,
+            rating=float(row["rating"]) if row.get("rating") else None,
+            reviews=int(float(row["reviews"])) if row.get("reviews") else None,
+            website=row.get("website", ""),
+            score=score_for_lead(row.get("rating"), row.get("reviews")),
+            status="pending",
+        )
+        db.add(prospect)
+        imported += 1
+    db.commit()
+    return {
+        "status": "completed",
+        "city": city,
+        "state": state,
+        "limit": limit,
+        "imported": imported,
+        "stderr": completed.stderr[-1200:],
+    }
+
+@app.post("/api/voiply/webhook")
+async def voiply_webhook(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    phone = payload.get("phone") or payload.get("from") or payload.get("caller_id") or ""
+    business = payload.get("business_name") or payload.get("name") or "Voiply Call"
+    disposition = payload.get("disposition") or "voicemail"
+    admin = db.query(User).filter(User.role == "admin").first()
+    if not admin:
+        raise HTTPException(status_code=500, detail="No admin user configured")
+    log = CallLog(
+        caller_id=admin.id,
+        business_name=business,
+        phone=phone,
+        disposition=disposition if disposition in DISPOSITION_LABELS else "voicemail",
+        notes=json.dumps(payload)[:2000],
+        duration_seconds=int(payload.get("duration_seconds", payload.get("duration", 0)) or 0),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return {"ok": True, "call": serialize(log)}
 
 # ── Serve Frontend ─────────────────────────────────────────────────────────
 @app.get("/")
 def serve_admin():
-    return FileResponse(str(STATIC_DIR / "admin.html"))
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 @app.get("/caller")
 def serve_caller():
-    return FileResponse(str(STATIC_DIR / "caller.html"))
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 @app.get("/admin")
 def serve_admin_page():
-    return FileResponse(str(STATIC_DIR / "admin.html"))
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 # ── Static files & Boot ──────────────────────────────────────────────────
 if __name__ == "__main__":

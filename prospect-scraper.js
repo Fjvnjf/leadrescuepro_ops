@@ -5,7 +5,7 @@
  * Example: node prospect-scraper.js Austin TX 40
  * 
  * Output: CSV to stdout with columns: business_name,phone,address,rating,reviews,website
- * CSV also saved to ~/leadrescuepro_ops/leads/{city}-{state}-plumbers.csv
+ * CSV also saved to ./leads/{city}-{state}-plumbers.csv
  * 
  * Uses Puppeteer + Google Maps search. Falls back to sample data if Chrome unavailable.
  */
@@ -16,7 +16,7 @@ const city = process.argv[2] || 'Austin';
 const state = process.argv[3] || 'TX';
 const limit = parseInt(process.argv[4]) || 30;
 
-const LEADS_DIR = path.join(process.env.HOME || '/home/hermeseassistant', 'leadrescuepro_ops', 'leads');
+const LEADS_DIR = path.join(__dirname, 'leads');
 if (!fs.existsSync(LEADS_DIR)) fs.mkdirSync(LEADS_DIR, { recursive: true });
 
 // SAMPLE DATA — used as fallback or primary source
