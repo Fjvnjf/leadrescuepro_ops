@@ -6,7 +6,7 @@ Dark cyberpunk command center for managing Bangladesh-based SDRs cold-calling US
 
 - GitHub Pages frontend: https://fjvnjf.github.io/lrp-dashboard-frontend/
 - Local backend: http://127.0.0.1:8650
-- Dashboard tunnel API base used by Pages: https://ordinary-moth-27.loca.lt/api
+- Dashboard tunnel API base used by Pages: https://funny-liger-34.loca.lt/api
 
 The frontend sends `abypass-tunnel-reminder: 1` on every API request so loca.lt warning pages are bypassed for API calls.
 
