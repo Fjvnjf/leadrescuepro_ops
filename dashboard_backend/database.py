@@ -43,6 +43,8 @@ class Prospect(Base):
     score = Column(String(5), default="B")  # A, B, C
     status = Column(String(30), default="pending")  # pending, called, contacted, callback_set, dnc
     source = Column(String(40), default="manual")  # manual, scraped, hermes_reddit
+    loom_sent = Column(Boolean, default=False)
+    loom_sent_at = Column(DateTime, nullable=True)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     last_contact = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
@@ -103,6 +105,20 @@ class Client(Base):
     usage_rate = Column(Float, default=0.5)
     started_at = Column(DateTime, default=datetime.utcnow)
     churned_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SdrCandidate(Base):
+    __tablename__ = "sdr_candidates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    email = Column(String(200), nullable=True)
+    phone = Column(String(40), nullable=True)
+    country = Column(String(80), default="Bangladesh")
+    stage = Column(String(40), default="applied")
+    source = Column(String(80), default="facebook")
+    applied_date = Column(DateTime, default=datetime.utcnow)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

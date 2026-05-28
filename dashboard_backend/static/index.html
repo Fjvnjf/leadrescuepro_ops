@@ -153,6 +153,25 @@
       font-weight: 700;
     }
 
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 1rem;
+      z-index: 30;
+      width: min(92vw, 520px);
+      padding: 0.8rem 1rem;
+      border: 1px solid rgba(255, 209, 102, 0.45);
+      border-radius: 10px;
+      color: var(--text);
+      background: rgba(7, 16, 27, 0.96);
+      box-shadow: var(--shadow);
+      transform: translate(-50%, 140%);
+      transition: transform 0.2s ease;
+      font-weight: 800;
+    }
+
+    .toast.show { transform: translate(-50%, 0); }
+
     .app {
       min-height: 100vh;
       display: grid;
@@ -563,8 +582,10 @@
           <div class="form-grid">
             <div class="field"><label>Search</label><input id="prospectSearch" placeholder="Business name"></div>
             <div class="field"><label>Status</label><select id="prospectStatus"><option value="">All</option><option value="pending">Pending</option><option value="called">Called</option><option value="contacted">Contacted</option><option value="callback_set">Callback set</option><option value="dnc">DNC</option></select></div>
-            <div class="field"><label>Source</label><select id="prospectSource"><option value="">All sources</option><option value="hermes_reddit">Hermes Reddit</option><option value="scraped">Scraped leads</option><option value="manual">Manual</option></select></div>
+            <div class="field"><label>Source</label><select id="prospectSource"><option value="">All sources</option><option value="hermes_reddit">Hermes Reddit</option><option value="hermes_other">Hermes Other</option><option value="scraped">Scraped leads</option><option value="manual">Manual</option><option value="imported">Imported</option></select></div>
+            <div class="field"><label>Import CSV</label><input id="prospectCsv" type="file" accept=".csv,text/csv"></div>
           </div>
+          <div id="prospectImportMessage" class="msg"></div>
         </div>
         <div class="grid" style="margin-bottom: 1rem;">
           <article class="card span-6">
@@ -576,7 +597,7 @@
             <ul id="scrapedProspectList" class="list"></ul>
           </article>
         </div>
-        <div class="card table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Source</th><th>Score</th><th>Status</th><th>Last contact</th><th>Assign</th></tr></thead><tbody id="prospectRows"></tbody></table></div>
+        <div class="card table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Source</th><th>Score</th><th>Status</th><th>Loom</th><th>Last contact</th><th>Assign</th></tr></thead><tbody id="prospectRows"></tbody></table></div>
       </section>
 
       <section id="callers" class="tab-panel">
@@ -585,11 +606,21 @@
             <h3>Add SDR</h3>
             <div class="field"><label>Username</label><input name="username" required></div>
             <div class="field"><label>Full name</label><input name="full_name" required></div>
-            <div class="field"><label>PIN</label><input name="pin" maxlength="4" inputmode="numeric" required></div>
+            <div class="field"><label>PIN</label><input name="pin" maxlength="4" inputmode="numeric" value="1234" required></div>
             <button class="btn primary" type="submit">Create Caller</button>
             <div id="callerMessage" class="msg"></div>
           </form>
-          <div class="card table-wrap span-8"><table><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Today</th><th>Today rate</th><th>All-time dials</th><th>All-time rate</th></tr></thead><tbody id="callerRows"></tbody></table></div>
+          <div class="card table-wrap span-8"><table><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Today</th><th>Today rate</th><th>All-time dials</th><th>All-time rate</th><th>Action</th></tr></thead><tbody id="callerRows"></tbody></table></div>
+          <form id="candidateForm" class="card pad span-4 admin-only">
+            <h3>SDR hiring pipeline</h3>
+            <div class="field"><label>Name</label><input name="name" required></div>
+            <div class="field"><label>Phone</label><input name="phone"></div>
+            <div class="field"><label>Source</label><select name="source"><option value="facebook">Facebook</option><option value="upwork">Upwork</option><option value="linkedin">LinkedIn</option><option value="referral">Referral</option></select></div>
+            <div class="field"><label>Stage</label><select name="stage"><option value="applied">Applied</option><option value="shortlisted">Shortlisted</option><option value="interviewed">Interviewed</option><option value="training">Training</option><option value="active">Active</option><option value="rejected">Rejected</option><option value="blocked">Blocked</option></select></div>
+            <button class="btn primary" type="submit">Add Candidate</button>
+            <div id="candidateMessage" class="msg"></div>
+          </form>
+          <div class="card table-wrap span-8 admin-only"><table><thead><tr><th>Candidate</th><th>Phone</th><th>Source</th><th>Stage</th><th>Move</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
         </div>
       </section>
 
@@ -624,6 +655,7 @@
             <div class="field"><label>Limit</label><input name="limit" type="number" min="1" max="100" value="30"></div>
           </div>
           <button class="btn primary" type="submit">Run Scraper</button>
+          <div class="field" style="margin-top:1rem;"><label>Upload CSV</label><input id="scraperCsv" type="file" accept=".csv,text/csv"></div>
           <div id="scraperMessage" class="msg"></div>
         </form>
       </section>
@@ -639,7 +671,7 @@
             <button class="btn primary" type="submit">Save Client</button>
             <div id="clientMessage" class="msg"></div>
           </form>
-          <div class="card span-8 table-wrap"><table><thead><tr><th>Client</th><th>Owner</th><th>Stage</th><th>Status</th><th>MRR</th></tr></thead><tbody id="clientRows"></tbody></table></div>
+          <div class="card span-8 table-wrap"><table><thead><tr><th>Client</th><th>Owner</th><th>Stage</th><th>Status</th><th>MRR</th><th>Action</th></tr></thead><tbody id="clientRows"></tbody></table></div>
         </div>
       </section>
 
@@ -649,6 +681,13 @@
           <article class="card pad span-3"><div class="kpi-label">Clients</div><div id="revClients" class="kpi-value">0</div></article>
           <article class="card pad span-3"><div class="kpi-label">ARPU</div><div id="revArpu" class="kpi-value">$0</div></article>
           <article class="card pad span-3"><div class="kpi-label">Churn</div><div id="revChurn" class="kpi-value">0%</div></article>
+          <article class="card pad span-4"><div class="kpi-label">Setup revenue this month</div><div id="revSetup" class="kpi-value">$0</div></article>
+          <article class="card pad span-4"><div class="kpi-label">Commissions paid</div><div id="revCommissions" class="kpi-value">$0</div></article>
+          <article class="card pad span-4"><div class="kpi-label">Projected month</div><div id="revProjected" class="kpi-value">$0</div></article>
+          <article class="card span-12">
+            <div class="card-head"><h3>Monthly trend</h3><span>MRR and new clients</span></div>
+            <div id="revenueTrend" class="bars"></div>
+          </article>
         </div>
       </section>
 
@@ -662,6 +701,7 @@
     </main>
     <nav id="mobileNav" class="mobile-tabs"></nav>
   </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
     const TOKEN_KEY = "lrp_dashboard_token";
@@ -672,8 +712,8 @@
       ["calllog", "Call Log", "Log calls fast and keep the day clean.", "all"],
       ["prospects", "Prospects", "Search and work the lead database.", "all"],
       ["callers", "Callers", "Manage SDRs and performance.", "admin"],
-      ["weekly", "Weekly", "Seven-day operating trend.", "all"],
-      ["commissions", "Commissions", "Track closed deals and payouts.", "all"],
+      ["weekly", "Weekly", "Seven-day operating trend.", "admin"],
+      ["commissions", "Commissions", "Track closed deals and payouts.", "admin"],
       ["scraper", "Scraper", "Generate new plumber leads.", "admin"],
       ["clients", "Clients", "Client onboarding and subscription status.", "admin"],
       ["revenue", "Revenue", "MRR, ARPU, churn, and payout picture.", "admin"],
@@ -685,15 +725,53 @@
     const money = (n) => "$" + Number(n || 0).toLocaleString();
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
     const disp = (s) => String(s || "").replaceAll("_", " ");
-    const sourceLabel = (s) => ({ hermes_reddit: "Hermes Reddit", scraped: "Scraped", manual: "Manual" }[s] || s || "Manual");
+    const sourceLabel = (s) => ({ hermes_reddit: "Hermes Reddit", hermes_other: "Hermes Other", scraped: "Scraped", manual: "Manual", imported: "Imported" }[s] || s || "Manual");
+    let toastTimer;
+
+    function notify(message) {
+      const el = $("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 3600);
+    }
+
+    function clearSession() {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      state.token = null;
+      state.user = null;
+      $("appView").hidden = true;
+      $("loginView").hidden = false;
+    }
 
     async function api(path, options = {}) {
       const headers = { "abypass-tunnel-reminder": "1", ...(options.headers || {}) };
       if (state.token) headers.Authorization = "Bearer " + state.token;
-      if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
+      if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
       const res = await fetch(API_BASE + path, { ...options, headers });
+      if (res.status === 401 || res.status === 403) {
+        clearSession();
+        throw new Error("Session expired. Log in again.");
+      }
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
       return res.json();
+    }
+
+    async function waitForBackend(retries = 8) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          await fetch(API_BASE + "/health", { headers: { "abypass-tunnel-reminder": "1" } });
+          $("apiStatus").textContent = "API online";
+          return true;
+        } catch {
+          $("apiStatus").textContent = `Waiting for API ${attempt}/${retries}`;
+          await new Promise(resolve => setTimeout(resolve, 700));
+        }
+      }
+      notify("Backend is not reachable yet.");
+      $("apiStatus").textContent = "API offline";
+      return false;
     }
 
     function showApp() {
@@ -730,13 +808,13 @@
         if (state.user?.role === "admin") await Promise.all([loadCallers(), loadCommissions(), loadClients(), loadRevenue(), loadHermesStatus(), loadSocial()]);
       } catch (err) {
         $("apiStatus").textContent = "API issue";
-        console.error(err);
+        notify(err.message);
       }
     }
 
     function refreshTab(id) {
       const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue, social: loadSocial };
-      if (map[id]) map[id]().catch(err => { $("apiStatus").textContent = err.message; });
+      if (map[id]) map[id]().catch(err => { $("apiStatus").textContent = err.message; notify(err.message); });
     }
 
     async function loadOverview() {
@@ -791,8 +869,19 @@
         state.callers = callers.callers || [];
       }
       $("prospectNames").innerHTML = state.prospects.map(p => `<option value="${esc(p.business_name)}">`).join("");
-      $("prospectRows").innerHTML = state.prospects.map(p => `<tr><td class="strong">${esc(p.business_name)}</td><td>${esc(p.phone)}</td><td>${esc(p.city || "")}, ${esc(p.state || "")}</td><td><span class="pill">${esc(sourceLabel(p.source))}</span></td><td><span class="pill ${p.score === "A" ? "green" : p.score === "C" ? "red" : "amber"}">${esc(p.score || "B")}</span></td><td>${esc(p.status)}</td><td>${esc(p.last_contact || "-")}</td><td>${state.user?.role === "admin" ? callerAssignSelect(p) : ""}</td></tr>`).join("");
+      $("prospectRows").innerHTML = state.prospects.map(p => `<tr><td class="strong">${esc(p.business_name)}</td><td>${esc(p.phone)}</td><td>${esc(p.city || "")}, ${esc(p.state || "")}</td><td><span class="pill">${esc(sourceLabel(p.source))}</span></td><td><span class="pill ${p.score === "A" ? "green" : p.score === "C" ? "red" : "amber"}">${esc(p.score || "B")}</span></td><td>${esc(p.status)}</td><td>${loomButton(p)}</td><td>${esc(p.last_contact || "-")}</td><td>${state.user?.role === "admin" ? callerAssignSelect(p) : ""}</td></tr>`).join("");
       await loadProspectSources();
+    }
+
+    function loomButton(p) {
+      const cls = p.loom_sent ? "green" : "";
+      const text = p.loom_sent ? "Sent" : "Not sent";
+      return `<button class="btn ${cls}" type="button" onclick="toggleLoom(${p.id}, ${p.loom_sent ? "false" : "true"})">${text}</button>`;
+    }
+
+    async function toggleLoom(id, value) {
+      await api(`/prospects/${id}`, { method: "PATCH", body: JSON.stringify({ loom_sent: value }) });
+      loadProspects();
     }
 
     function callerAssignSelect(p) {
@@ -826,9 +915,30 @@
           api(`/kpis/caller/${c.id}`).catch(() => ({})),
           api(`/callers/${c.id}/performance`).catch(() => ({})),
         ]);
-        return `<tr><td class="strong">${esc(c.full_name)}</td><td>${esc(c.username)}</td><td><span class="pill green">Active</span></td><td>${k.dials_today || 0}</td><td>${k.connect_rate || 0}%</td><td>${perf.total_dials || 0}</td><td>${perf.avg_connect_rate || 0}%</td></tr>`;
+        return `<tr><td class="strong">${esc(c.full_name)}</td><td>${esc(c.username)}</td><td><span class="pill ${c.active ? "green" : "red"}">${c.active ? "Active" : "Blocked"}</span></td><td>${k.dials_today || 0}</td><td>${k.connect_rate || 0}%</td><td>${perf.total_dials || 0}</td><td>${perf.avg_connect_rate || 0}%</td><td><button class="btn" type="button" onclick="toggleCaller(${c.id}, ${c.active ? "false" : "true"})">${c.active ? "Block" : "Unblock"}</button></td></tr>`;
       }));
       $("callerRows").innerHTML = rows.join("");
+      await loadCandidates();
+    }
+
+    async function toggleCaller(id, active) {
+      await api(`/callers/${id}`, { method: "PATCH", body: JSON.stringify({ active }) });
+      loadCallers();
+    }
+
+    async function loadCandidates() {
+      if (state.user?.role !== "admin") return;
+      const data = await api("/sdr-candidates").catch(() => ({ candidates: [] }));
+      const stages = ["applied", "shortlisted", "interviewed", "training", "active", "rejected", "blocked"];
+      $("candidateRows").innerHTML = (data.candidates || []).map(c => {
+        const options = stages.map(s => `<option value="${s}" ${c.stage === s ? "selected" : ""}>${esc(disp(s))}</option>`).join("");
+        return `<tr><td class="strong">${esc(c.name)}</td><td>${esc(c.phone || "")}</td><td>${esc(c.source || "")}</td><td><span class="pill">${esc(disp(c.stage))}</span></td><td><select onchange="updateCandidateStage(${c.id}, this.value)">${options}</select></td></tr>`;
+      }).join("") || `<tr><td colspan="5" class="muted">No SDR candidates yet.</td></tr>`;
+    }
+
+    async function updateCandidateStage(id, stage) {
+      await api(`/sdr-candidates/${id}`, { method: "PATCH", body: JSON.stringify({ stage }) });
+      loadCandidates();
     }
 
     async function loadWeekly() {
@@ -852,7 +962,19 @@
     async function loadClients() {
       if (state.user?.role !== "admin") return;
       const data = await api("/clients");
-      $("clientRows").innerHTML = (data.clients || []).map(c => `<tr><td class="strong">${esc(c.business_name)}</td><td>${esc(c.owner_name || "")}</td><td><span class="pill">${esc(c.onboarding_stage)}</span></td><td>${esc(c.subscription_status)}</td><td>${money(c.monthly_revenue)}</td></tr>`).join("");
+      $("clientRows").innerHTML = (data.clients || []).map(c => `<tr><td class="strong">${esc(c.business_name)}</td><td>${esc(c.owner_name || "")}</td><td><span class="pill">${esc(c.onboarding_stage)}</span></td><td><select onchange="updateClientStatus(${c.id}, this.value)"><option value="active" ${c.subscription_status === "active" ? "selected" : ""}>Active</option><option value="trial" ${c.subscription_status === "trial" ? "selected" : ""}>Trial</option><option value="paused" ${c.subscription_status === "paused" ? "selected" : ""}>Paused</option><option value="cancelled" ${c.subscription_status === "cancelled" ? "selected" : ""}>Cancelled</option></select></td><td>${money(c.monthly_revenue)}</td><td><button class="btn danger" type="button" onclick="deleteClient(${c.id})">Delete</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">No clients yet.</td></tr>`;
+    }
+
+    async function updateClientStatus(id, subscription_status) {
+      await api(`/clients/${id}`, { method: "PATCH", body: JSON.stringify({ subscription_status }) });
+      loadClients();
+      loadRevenue();
+    }
+
+    async function deleteClient(id) {
+      await api(`/clients/${id}`, { method: "DELETE" });
+      loadClients();
+      loadRevenue();
     }
 
     async function loadRevenue() {
@@ -862,6 +984,11 @@
       $("revClients").textContent = r.active_clients || 0;
       $("revArpu").textContent = money(r.arpu);
       $("revChurn").textContent = (r.churn_rate || 0) + "%";
+      $("revSetup").textContent = money(r.new_setup_revenue_this_month);
+      $("revCommissions").textContent = money(r.commission_paid_this_month);
+      $("revProjected").textContent = money(r.projected_month_revenue);
+      const max = Math.max(1, ...(r.monthly_trend || []).map(m => m.mrr));
+      $("revenueTrend").innerHTML = (r.monthly_trend || []).map(m => `<div class="bar-row"><div class="bar-label"><span>${esc(m.month)}</span><span>${money(m.mrr)} / ${m.new_clients} new</span></div><div class="track"><span class="fill" style="width:${Math.max(4, m.mrr / max * 100)}%"></span></div></div>`).join("");
     }
 
     async function loadSocial() {
@@ -898,49 +1025,98 @@
 
     $("callForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const payload = formData(e.currentTarget);
-      payload.duration_seconds = Number(payload.duration_seconds || 0);
-      const saved = await api("/calls/log", { method: "POST", body: JSON.stringify(payload) });
-      $("callMessage").textContent = "Saved call #" + saved.id;
-      e.currentTarget.reset();
-      loadOverview();
+      try {
+        const payload = formData(e.currentTarget);
+        payload.duration_seconds = Number(payload.duration_seconds || 0);
+        const saved = await api("/calls/log", { method: "POST", body: JSON.stringify(payload) });
+        $("callMessage").textContent = "Saved call #" + saved.id;
+        e.currentTarget.reset();
+        loadOverview();
+      } catch (err) {
+        $("callMessage").textContent = err.message;
+        notify(err.message);
+      }
     });
 
     $("callerForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      await api("/callers", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
-      $("callerMessage").textContent = "Caller created.";
-      e.currentTarget.reset();
-      loadCallers();
+      try {
+        await api("/callers", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("callerMessage").textContent = "Caller created.";
+        e.currentTarget.reset();
+        loadCallers();
+      } catch (err) {
+        $("callerMessage").textContent = err.message;
+        notify(err.message);
+      }
+    });
+
+    $("candidateForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await api("/sdr-candidates", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("candidateMessage").textContent = "Candidate added.";
+        e.currentTarget.reset();
+        loadCandidates();
+      } catch (err) {
+        $("candidateMessage").textContent = err.message;
+        notify(err.message);
+      }
     });
 
     $("commissionForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      await api("/commissions", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
-      $("commissionMessage").textContent = "Commission added.";
-      loadCommissions();
+      try {
+        await api("/commissions", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("commissionMessage").textContent = "Commission added.";
+        loadCommissions();
+      } catch (err) {
+        $("commissionMessage").textContent = err.message;
+        notify(err.message);
+      }
     });
 
     $("scraperForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       $("scraperMessage").textContent = "Scraper running...";
-      const result = await api("/scraper/run", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
-      $("scraperMessage").textContent = `Imported ${result.imported} leads for ${result.city}, ${result.state}.`;
-      loadProspects();
+      try {
+        const result = await api("/scraper/run", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("scraperMessage").textContent = `Imported ${result.imported} leads for ${result.city}, ${result.state}.`;
+        loadProspects();
+      } catch (err) {
+        $("scraperMessage").textContent = err.message;
+        notify(err.message);
+      }
     });
+
+    async function importCsvFile(file, messageId) {
+      if (!file) return;
+      const csvText = await file.text();
+      const result = await api("/prospects/import-csv", { method: "POST", headers: { "Content-Type": "text/csv" }, body: csvText });
+      $(messageId).textContent = `Imported ${result.imported} prospects.`;
+      loadProspects();
+    }
+
+    $("prospectCsv").addEventListener("change", (e) => importCsvFile(e.currentTarget.files[0], "prospectImportMessage").catch(err => $("prospectImportMessage").textContent = err.message));
+    $("scraperCsv").addEventListener("change", (e) => importCsvFile(e.currentTarget.files[0], "scraperMessage").catch(err => $("scraperMessage").textContent = err.message));
 
     $("clientForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      await api("/clients", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
-      $("clientMessage").textContent = "Client saved.";
-      e.currentTarget.reset();
-      loadClients();
-      loadRevenue();
+      try {
+        await api("/clients", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("clientMessage").textContent = "Client saved.";
+        e.currentTarget.reset();
+        loadClients();
+        loadRevenue();
+      } catch (err) {
+        $("clientMessage").textContent = err.message;
+        notify(err.message);
+      }
     });
 
-    $("prospectSearch").addEventListener("input", () => loadProspects().catch(console.error));
-    $("prospectStatus").addEventListener("change", () => loadProspects().catch(console.error));
-    $("prospectSource").addEventListener("change", () => loadProspects().catch(console.error));
+    $("prospectSearch").addEventListener("input", () => loadProspects().catch(err => notify(err.message)));
+    $("prospectStatus").addEventListener("change", () => loadProspects().catch(err => notify(err.message)));
+    $("prospectSource").addEventListener("change", () => loadProspects().catch(err => notify(err.message)));
     $("refreshBtn").addEventListener("click", refreshAll);
     $("logoutBtn").addEventListener("click", () => {
       localStorage.removeItem(TOKEN_KEY);
@@ -948,13 +1124,12 @@
       location.reload();
     });
 
-    if (state.token && state.user) {
-      api("/auth/me").then((user) => { state.user = user; showApp(); }).catch(() => {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-      });
-    }
-    setInterval(() => { if (!$("appView").hidden) loadOverview().catch(console.error); }, 30000);
+    waitForBackend().then((online) => {
+      if (online && state.token && state.user) {
+        api("/auth/me").then((user) => { state.user = user; showApp(); }).catch(err => notify(err.message));
+      }
+    });
+    setInterval(() => { if (!$("appView").hidden) loadOverview().catch(err => notify(err.message)); }, 30000);
   </script>
 </body>
 </html>

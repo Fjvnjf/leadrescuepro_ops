@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, text
 
-from database import init_db, get_db, engine, User, Prospect, CallLog, Commission, Recording, Client
+from database import init_db, get_db, engine, User, Prospect, CallLog, Commission, Recording, Client, SdrCandidate
 from auth import verify_pin, hash_pin, create_access_token, get_current_user, require_admin
 
 # ── Setup ────────────────────────────────────────────────────────────────
@@ -112,11 +112,25 @@ def serialize_user(user: User):
     data.pop("pin_hash", None)
     return data
 
+def serialize_client(client: Client):
+    data = serialize(client)
+    data["company_name"] = data.get("business_name")
+    data["contact_name"] = data.get("owner_name")
+    data["onboarding_progress"] = data.get("onboarding_stage")
+    data["start_date"] = data.get("started_at")
+    return data
+
 def utc_day_bounds(days_ago: int = 0):
     """Return naive UTC start/end datetimes for SQLite comparisons."""
     target = datetime.now(timezone.utc).date() - timedelta(days=days_ago)
     start = datetime(target.year, target.month, target.day)
     return start, start + timedelta(days=1)
+
+def shift_month(month_start: datetime, offset: int):
+    month_index = month_start.month - 1 + offset
+    year = month_start.year + month_index // 12
+    month = month_index % 12 + 1
+    return month_start.replace(year=year, month=month, day=1)
 
 def score_for_lead(rating, reviews):
     try:
@@ -197,6 +211,10 @@ def migrate_db():
         if "source" not in columns:
             conn.execute(text("ALTER TABLE prospects ADD COLUMN source VARCHAR(40) DEFAULT 'manual'"))
             conn.execute(text("UPDATE prospects SET source='scraped' WHERE source IS NULL OR source=''"))
+        if "loom_sent" not in columns:
+            conn.execute(text("ALTER TABLE prospects ADD COLUMN loom_sent BOOLEAN DEFAULT 0"))
+        if "loom_sent_at" not in columns:
+            conn.execute(text("ALTER TABLE prospects ADD COLUMN loom_sent_at DATETIME"))
 
 def seed_hermes_prospects(db: Session):
     for item in parse_reddit_research():
@@ -326,6 +344,10 @@ def update_prospect(prospect_id: int, data: dict, db: Session = Depends(get_db),
     for k, v in data.items():
         if hasattr(Prospect, k) and k != "id":
             setattr(prospect, k, v)
+    if data.get("loom_sent") is True and not prospect.loom_sent_at:
+        prospect.loom_sent_at = datetime.utcnow()
+    if data.get("loom_sent") is False:
+        prospect.loom_sent_at = None
     db.commit()
     db.refresh(prospect)
     return serialize(prospect)
@@ -904,7 +926,7 @@ def transcribe_recording(rec_id: int, db: Session = Depends(get_db), user: User 
 # ── Caller Management (Admin) ────────────────────────────────────────────
 @app.get("/api/callers")
 def list_callers(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    callers = db.query(User).filter(User.role == "caller", User.active == True).all()
+    callers = db.query(User).filter(User.role == "caller").order_by(User.created_at.desc()).all()
     result = []
     for c in callers:
         data = serialize(c)
@@ -929,6 +951,21 @@ def create_caller(data: dict, db: Session = Depends(get_db), user: User = Depend
     data = serialize(caller)
     del data["pin_hash"]
     return data
+
+@app.patch("/api/callers/{caller_id}")
+def update_caller(caller_id: int, data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    caller = db.query(User).filter(User.id == caller_id, User.role == "caller").first()
+    if not caller:
+        raise HTTPException(status_code=404, detail="Caller not found")
+    if "active" in data:
+        caller.active = bool(data["active"])
+    if "full_name" in data:
+        caller.full_name = data["full_name"]
+    if "pin" in data and data["pin"]:
+        caller.pin_hash = hash_pin(str(data["pin"]))
+    db.commit()
+    db.refresh(caller)
+    return serialize_user(caller)
 
 @app.get("/api/callers/{caller_id}/performance")
 def caller_performance(caller_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
@@ -959,25 +996,74 @@ def caller_performance(caller_id: int, db: Session = Depends(get_db), user: User
         "recent_calls": recent_calls,
     }
 
+# ── SDR Hiring Pipeline ─────────────────────────────────────────────────
+@app.get("/api/sdr-candidates")
+def list_sdr_candidates(stage: str = Query(None), db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    query = db.query(SdrCandidate)
+    if stage:
+        query = query.filter(SdrCandidate.stage == stage)
+    candidates = query.order_by(SdrCandidate.created_at.desc()).all()
+    return {"candidates": [serialize(c) for c in candidates]}
+
+@app.post("/api/sdr-candidates")
+def create_sdr_candidate(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    candidate = SdrCandidate(
+        name=name,
+        email=data.get("email", ""),
+        phone=data.get("phone", ""),
+        country=data.get("country", "Bangladesh"),
+        stage=data.get("stage", "applied"),
+        source=data.get("source", "facebook"),
+        notes=data.get("notes", ""),
+    )
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    return serialize(candidate)
+
+@app.patch("/api/sdr-candidates/{candidate_id}")
+def update_sdr_candidate(candidate_id: int, data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    candidate = db.query(SdrCandidate).filter(SdrCandidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    for key, value in data.items():
+        if hasattr(SdrCandidate, key) and key != "id":
+            setattr(candidate, key, value)
+    db.commit()
+    db.refresh(candidate)
+    return serialize(candidate)
+
+@app.delete("/api/sdr-candidates/{candidate_id}")
+def delete_sdr_candidate(candidate_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    candidate = db.query(SdrCandidate).filter(SdrCandidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    db.delete(candidate)
+    db.commit()
+    return {"ok": True}
+
 # ── Client & Revenue Routes ─────────────────────────────────────────────
 @app.get("/api/clients")
 def list_clients(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     clients = db.query(Client).order_by(Client.created_at.desc()).all()
-    return {"clients": [serialize(c) for c in clients]}
+    return {"clients": [serialize_client(c) for c in clients]}
 
 @app.post("/api/clients")
 def create_client(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    business_name = (data.get("business_name") or "").strip()
+    business_name = (data.get("business_name") or data.get("company_name") or "").strip()
     if not business_name:
-        raise HTTPException(status_code=400, detail="business_name required")
+        raise HTTPException(status_code=400, detail="company_name required")
     client = Client(
         business_name=business_name,
-        owner_name=data.get("owner_name", ""),
+        owner_name=data.get("owner_name", data.get("contact_name", "")),
         phone=data.get("phone", ""),
         email=data.get("email", ""),
         city=data.get("city", ""),
         state=data.get("state", "TX"),
-        onboarding_stage=data.get("onboarding_stage", "new"),
+        onboarding_stage=data.get("onboarding_stage", data.get("onboarding_progress", "new")),
         subscription_status=data.get("subscription_status", "active"),
         setup_fee=float(data.get("setup_fee", 997.0) or 0),
         monthly_revenue=float(data.get("monthly_revenue", 499.0) or 0),
@@ -988,34 +1074,58 @@ def create_client(data: dict, db: Session = Depends(get_db), user: User = Depend
     db.add(client)
     db.commit()
     db.refresh(client)
-    return serialize(client)
+    return serialize_client(client)
 
 @app.patch("/api/clients/{client_id}")
 def update_client(client_id: int, data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+    aliases = {
+        "company_name": "business_name",
+        "contact_name": "owner_name",
+        "onboarding_progress": "onboarding_stage",
+        "start_date": "started_at",
+    }
     for key, value in data.items():
+        key = aliases.get(key, key)
         if hasattr(Client, key) and key != "id":
             setattr(client, key, value)
-    if data.get("subscription_status") == "churned" and not client.churned_at:
+    if data.get("subscription_status") in {"cancelled", "churned"} and not client.churned_at:
         client.churned_at = datetime.utcnow()
     db.commit()
     db.refresh(client)
-    return serialize(client)
+    return serialize_client(client)
 
 @app.get("/api/revenue")
 def revenue_metrics(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     clients = db.query(Client).all()
-    active = [c for c in clients if c.subscription_status == "active"]
-    churned = [c for c in clients if c.subscription_status == "churned"]
-    mrr = sum(float(c.monthly_revenue or 0) + float(c.usage_minutes or 0) * float(c.usage_rate or 0) for c in active)
+    active = [c for c in clients if c.subscription_status in {"active", "trial"}]
+    churned = [c for c in clients if c.subscription_status in {"cancelled", "churned"}]
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    new_this_month = [c for c in clients if c.started_at and c.started_at >= month_start]
+    mrr = sum(float(c.monthly_revenue or 499.0) + float(c.usage_minutes or 0) * float(c.usage_rate or 0) for c in active)
+    new_setup_revenue = sum(float(c.setup_fee or 997.0) for c in new_this_month)
     setup_total = sum(float(c.setup_fee or 0) for c in clients)
     commission_pending = db.query(func.sum(Commission.commission_amount)).filter(Commission.status != "paid").scalar() or 0
     commission_paid = db.query(func.sum(Commission.commission_amount)).filter(Commission.status == "paid").scalar() or 0
+    commission_paid_this_month = db.query(func.sum(Commission.commission_amount)).filter(
+        Commission.status == "paid",
+        Commission.paid_date >= month_start,
+    ).scalar() or 0
     total_clients = len(clients)
     churn_rate = round(len(churned) / total_clients * 100, 1) if total_clients else 0
     arpu = round(mrr / len(active), 2) if active else 0
+    monthly_trend = []
+    for offset in range(5, -1, -1):
+        month = shift_month(month_start, -offset)
+        next_month = shift_month(month, 1)
+        month_clients = [c for c in clients if c.started_at and c.started_at < next_month and c.subscription_status in {"active", "trial"}]
+        monthly_trend.append({
+            "month": month.strftime("%Y-%m"),
+            "mrr": round(sum(float(c.monthly_revenue or 499.0) for c in month_clients), 2),
+            "new_clients": len([c for c in clients if c.started_at and month <= c.started_at < next_month]),
+        })
     return {
         "mrr": round(mrr, 2),
         "active_clients": len(active),
@@ -1023,10 +1133,15 @@ def revenue_metrics(db: Session = Depends(get_db), user: User = Depends(require_
         "churned_clients": len(churned),
         "churn_rate": churn_rate,
         "arpu": arpu,
+        "new_clients_this_month": len(new_this_month),
+        "new_setup_revenue_this_month": round(new_setup_revenue, 2),
+        "projected_month_revenue": round(mrr + new_setup_revenue, 2),
         "setup_revenue_total": round(setup_total, 2),
         "commission_pending": round(float(commission_pending), 2),
         "commission_paid": round(float(commission_paid), 2),
-        "clients": [serialize(c) for c in clients],
+        "commission_paid_this_month": round(float(commission_paid_this_month), 2),
+        "monthly_trend": monthly_trend,
+        "clients": [serialize_client(c) for c in clients],
     }
 
 @app.delete("/api/clients/{client_id}")
@@ -1240,6 +1355,7 @@ def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends
         "stderr": completed.stderr[-1200:],
     }
 
+@app.post("/api/webhooks/voiply")
 @app.post("/api/voiply/webhook")
 async def voiply_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.json()
