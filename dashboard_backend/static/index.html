@@ -807,8 +807,16 @@
     async function refreshAll() {
       try {
         $("apiStatus").textContent = "API online";
-        await Promise.all([loadOverview(), loadProspects(), loadWeekly()]);
-        if (state.user?.role === "admin") await Promise.all([loadCallers(), loadCommissions(), loadClients(), loadRevenue(), loadHermesStatus(), loadSocial()]);
+        await loadOverview();
+        await loadProspects();
+        if (state.user?.role === "admin") {
+          await loadWeekly();
+          await loadCallers();
+          await loadCommissions();
+          await loadClients();
+          await loadRevenue();
+          await loadSocial();
+        }
       } catch (err) {
         $("apiStatus").textContent = "API issue";
         notify(err.message);
