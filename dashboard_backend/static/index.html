@@ -756,6 +756,7 @@
         throw new Error("Session expired. Log in again.");
       }
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      if ($("apiStatus")) $("apiStatus").textContent = "API online";
       return res.json();
     }
 
@@ -776,6 +777,7 @@
     }
 
     function showApp() {
+      $("loginMessage").textContent = "";
       $("loginView").hidden = true;
       $("appView").hidden = false;
       $("userLabel").textContent = state.user?.full_name || state.user?.username || "Signed in";
@@ -1125,11 +1127,14 @@
       location.reload();
     });
 
-    waitForBackend().then((online) => {
-      if (online && state.token && state.user) {
+    if (state.token && state.user) {
+      waitForBackend().then((online) => {
+        if (!online) return;
         api("/auth/me").then((user) => { state.user = user; showApp(); }).catch(err => notify(err.message));
-      }
-    });
+      });
+    } else {
+      $("apiStatus").textContent = "Ready";
+    }
     setInterval(() => { if (!$("appView").hidden) loadOverview().catch(err => notify(err.message)); }, 30000);
   </script>
 </body>
