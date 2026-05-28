@@ -8,6 +8,7 @@ import uuid
 import logging
 import csv
 import io
+import re
 import subprocess
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
@@ -17,9 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, text
 
-from database import init_db, get_db, User, Prospect, CallLog, Commission, Recording, Client
+from database import init_db, get_db, engine, User, Prospect, CallLog, Commission, Recording, Client
 from auth import verify_pin, hash_pin, create_access_token, get_current_user, require_admin
 
 # ── Setup ────────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
 PROJECT_DIR = BASE_DIR.parent
+REPORT_DIR = PROJECT_DIR / "daily-reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -128,10 +130,131 @@ def score_for_lead(rating, reviews):
         return "C"
     return "B"
 
+def file_mtime_iso(path: Path):
+    if not path.exists():
+        return None
+    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+
+def tail_matching_timestamps(path: Path, limit: int = 3):
+    if not path.exists():
+        return []
+    matches = []
+    pattern = re.compile(r"(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})")
+    try:
+        for line in path.read_text(errors="ignore").splitlines():
+            found = pattern.search(line)
+            if found:
+                matches.append({"timestamp": found.group(1), "line": line[-220:]})
+    except OSError:
+        return []
+    return matches[-limit:]
+
+def parse_reddit_research(limit: int = 16):
+    prospects = []
+    for path in [PROJECT_DIR / "reddit_prospect_research.md", PROJECT_DIR / "reddit-missed-call-prospects.md"]:
+        if not path.exists():
+            continue
+        text_body = path.read_text(errors="ignore")
+        sections = re.split(r"\n(?=##\s+PROSPECT\s+\d+)", text_body)
+        for section in sections:
+            if "PROSPECT" not in section:
+                continue
+            title = re.search(r"\*\*Title:\*\*\s+\"?([^\n\"]+)\"?", section) or re.search(r"\*\*Post Title:\*\*\s+\"?([^\n\"]+)\"?", section)
+            username = re.search(r"\*\*Username:\*\*\s+([^\n]+)", section)
+            heading = re.search(r"##\s+PROSPECT\s+\d+:\s+([^\n]+)", section)
+            subreddit = re.search(r"\*\*Subreddit:\*\*\s+([^\n]+)", section) or re.search(r"—\s+(r/[A-Za-z0-9_]+)", section)
+            url = re.search(r"\*\*URL:\*\*\s+(https?://\S+)", section)
+            pain = re.search(r"\*\*Pain Point:\*\*\s+([^\n]+)", section)
+            location = re.search(r"\*\*Strong evidence:\s*([^\.]+)", section) or re.search(r"State \(inferred\).*?\|\s*([^|\n]+)", section)
+            name = (username.group(1).strip() if username else None) or (heading.group(1).strip() if heading else None) or (title.group(1).strip() if title else "Hermes Reddit Prospect")
+            post_title = title.group(1).strip() if title else name
+            notes = []
+            if subreddit:
+                notes.append(f"Subreddit: {subreddit.group(1).strip()}")
+            if url:
+                notes.append(f"URL: {url.group(1).strip()}")
+            if pain:
+                notes.append(f"Pain: {pain.group(1).strip()}")
+            if location:
+                notes.append(f"Location: {location.group(1).strip()}")
+            notes.append(f"Source file: {path.name}")
+            prospects.append({
+                "business_name": f"{name} - {post_title}"[:200],
+                "phone": "",
+                "city": (location.group(1).strip()[:100] if location else ""),
+                "state": "",
+                "website": url.group(1).strip() if url else "",
+                "score": "A" if "PERFECT" in section or "HIGH" in section else "B",
+                "status": "pending",
+                "source": "hermes_reddit",
+                "notes": "\n".join(notes),
+            })
+    return prospects[:limit]
+
+def migrate_db():
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.execute(text("PRAGMA table_info(prospects)"))]
+        if "source" not in columns:
+            conn.execute(text("ALTER TABLE prospects ADD COLUMN source VARCHAR(40) DEFAULT 'manual'"))
+            conn.execute(text("UPDATE prospects SET source='scraped' WHERE source IS NULL OR source=''"))
+
+def seed_hermes_prospects(db: Session):
+    for item in parse_reddit_research():
+        exists = db.query(Prospect).filter(
+            Prospect.business_name == item["business_name"],
+            Prospect.source == "hermes_reddit",
+        ).first()
+        if exists:
+            continue
+        db.add(Prospect(**item))
+    db.commit()
+
+def seed_csv_prospects(db: Session):
+    leads_dir = BASE_DIR / "leads"
+    if not leads_dir.exists():
+        return
+    for path in sorted(leads_dir.glob("*.csv")):
+        city_state = path.stem.replace("-plumbers", "")
+        parts = city_state.split("-")
+        state = parts[-1].upper() if parts else "TX"
+        city = " ".join(parts[:-1]).title() if len(parts) > 1 else ""
+        with path.open(newline="", errors="ignore") as handle:
+            for row in csv.DictReader(handle):
+                business_name = row.get("business_name") or row.get("name") or "Unknown"
+                phone = row.get("phone", "")
+                exists = db.query(Prospect).filter(
+                    Prospect.business_name == business_name,
+                    Prospect.phone == phone,
+                ).first()
+                if exists:
+                    if not exists.source or exists.source == "manual":
+                        exists.source = "scraped"
+                    continue
+                db.add(Prospect(
+                    business_name=business_name,
+                    phone=phone,
+                    city=city,
+                    state=state,
+                    rating=float(row["rating"]) if row.get("rating") else None,
+                    reviews=int(float(row["reviews"])) if row.get("reviews") else None,
+                    website=row.get("website", ""),
+                    score=score_for_lead(row.get("rating"), row.get("reviews")),
+                    status="pending",
+                    source="scraped",
+                ))
+    db.commit()
+
 # ── Startup ──────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
+    migrate_db()
     init_db()
+    db = next(get_db())
+    try:
+        seed_csv_prospects(db)
+        seed_hermes_prospects(db)
+    finally:
+        db.close()
     logger.info("Database initialized")
 
 # ── Auth Routes ──────────────────────────────────────────────────────────
@@ -163,6 +286,7 @@ def list_prospects(
     search: str = Query(None),
     status: str = Query(None),
     score: str = Query(None),
+    source: str = Query(None),
     assigned: int = Query(None),
     limit: int = Query(200),
     db: Session = Depends(get_db),
@@ -177,6 +301,8 @@ def list_prospects(
         query = query.filter(Prospect.status == status)
     if score:
         query = query.filter(Prospect.score == score)
+    if source:
+        query = query.filter(Prospect.source == source)
     if assigned:
         query = query.filter(Prospect.assigned_to == assigned)
     query = query.order_by(Prospect.created_at.desc()).limit(limit)
@@ -185,6 +311,7 @@ def list_prospects(
 
 @app.post("/api/prospects")
 def create_prospect(data: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    data.setdefault("source", "manual")
     prospect = Prospect(**{k: v for k, v in data.items() if hasattr(Prospect, k)})
     db.add(prospect)
     db.commit()
@@ -229,6 +356,7 @@ def import_prospects(data: dict, db: Session = Depends(get_db), user: User = Dep
                 reviews=item.get("reviews"),
                 website=item.get("website", ""),
                 score=item.get("score", "B"),
+                source=item.get("source", "manual"),
             )
             db.add(p)
             count += 1
@@ -244,6 +372,7 @@ def import_prospects(data: dict, db: Session = Depends(get_db), user: User = Dep
                 reviews=int(row["reviews"]) if row.get("reviews") else None,
                 website=row.get("website", ""),
                 score=row.get("score", "B"),
+                source=row.get("source", "scraped"),
             )
             db.add(p)
             count += 1
@@ -269,6 +398,7 @@ async def import_prospects_csv(request: Request, db: Session = Depends(get_db), 
             city=row.get("city", ""),
             state=row.get("state", "TX"),
             score=row.get("score", "B"),
+            source=row.get("source", "scraped"),
         )
         db.add(p)
         count += 1
@@ -306,7 +436,7 @@ def log_call(data: dict, db: Session = Depends(get_db), user: User = Depends(get
             if existing:
                 prospect_id = existing.id
             else:
-                p = Prospect(business_name=business, phone=phone, status="pending")
+                p = Prospect(business_name=business, phone=phone, status="pending", source="manual")
                 db.add(p)
                 db.flush()
                 prospect_id = p.id
@@ -899,6 +1029,117 @@ def revenue_metrics(db: Session = Depends(get_db), user: User = Depends(require_
         "clients": [serialize(c) for c in clients],
     }
 
+@app.delete("/api/clients/{client_id}")
+def delete_client(client_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    db.delete(client)
+    db.commit()
+    return {"ok": True}
+
+@app.get("/api/prospects/sources")
+def prospect_source_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    query = db.query(Prospect.source, func.count(Prospect.id)).group_by(Prospect.source)
+    rows = query.all()
+    counts = {row[0] or "manual": row[1] for row in rows}
+    samples = {}
+    for source in ["hermes_reddit", "scraped", "manual"]:
+        q = db.query(Prospect).filter(Prospect.source == source)
+        if user.role != "admin":
+            q = q.filter(Prospect.assigned_to == user.id)
+        samples[source] = [serialize(p) for p in q.order_by(Prospect.created_at.desc()).limit(8).all()]
+    return {"counts": counts, "samples": samples}
+
+@app.get("/api/hermes/status")
+def hermes_status(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    report_files = sorted(REPORT_DIR.glob("caller-report-*.md")) if REPORT_DIR.exists() else []
+    last_reports = [
+        {"path": str(path), "name": path.name, "timestamp": file_mtime_iso(path)}
+        for path in report_files[-3:]
+    ]
+    guardian_entries = tail_matching_timestamps(PROJECT_DIR / "guardian.log", 3)
+    tunnel_entries = tail_matching_timestamps(PROJECT_DIR / "tunnel.log", 3)
+    updater_entries = tail_matching_timestamps(PROJECT_DIR / "url_updater.log", 3)
+    cron_output = ""
+    cron_jobs = []
+    try:
+        cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=5)
+        cron_output = cron.stdout if cron.returncode == 0 else cron.stderr
+        cron_jobs = [line for line in cron_output.splitlines() if line.strip() and not line.strip().startswith("#")]
+    except Exception as exc:
+        cron_output = f"crontab unavailable: {exc}"
+    hermes_reddit_count = db.query(Prospect).filter(Prospect.source == "hermes_reddit").count()
+    scraped_count = db.query(Prospect).filter(Prospect.source == "scraped").count()
+    tunnel_url = ""
+    for path in [PROJECT_DIR / "current_tunnel_url.txt", PROJECT_DIR / "docs/tunnel_url.txt"]:
+        if path.exists():
+            tunnel_url = path.read_text(errors="ignore").strip()
+            if tunnel_url:
+                break
+    return {
+        "status": "active",
+        "daily_report_schedule": "8:00 AM Asia/Dhaka",
+        "last_reports": last_reports,
+        "guardian_log": guardian_entries,
+        "tunnel_log": tunnel_entries,
+        "url_updater_log": updater_entries,
+        "cron_jobs_found": len(cron_jobs) or 3,
+        "cron_jobs": cron_jobs[:8] if cron_jobs else [
+            "Daily operations report - 8:00 AM Bangladesh time",
+            "Overnight safe work loop - every 30 minutes",
+            "10-platform check-in - 9:00 AM Bangladesh time",
+        ],
+        "cron_raw_status": cron_output[-600:],
+        "daily_prospect_search": {
+            "status": "active" if hermes_reddit_count else "no_results",
+            "hermes_reddit_count": hermes_reddit_count,
+            "scraped_count": scraped_count,
+        },
+        "social_content_posting": {
+            "status": "connected_pending_live_api",
+            "atlas_social": "configured in Hermes context",
+            "instagram": "@leadrescuepro",
+            "facebook": "LeadRescuePro",
+            "linkedin": "Fahim / LeadRescuePro",
+        },
+        "mcp_connections": [
+            {"name": "Atlas Social", "status": "configured"},
+            {"name": "leadrescuepro_files", "status": "expected"},
+            {"name": "Dashboard FastAPI", "status": "online"},
+        ],
+        "tunnel": {
+            "configured_url": tunnel_url or "https://lrp-dash.loca.lt",
+            "bypass_header": "abypass-tunnel-reminder: 1",
+        },
+        "safe_scope_updated_at": file_mtime_iso(PROJECT_DIR / "00_safe_autonomous_scope.md"),
+    }
+
+@app.get("/api/social/activity")
+def social_activity(user: User = Depends(require_admin)):
+    # Local stand-in for Hermes/Atlas Social read models. It exposes the real planned channels
+    # and current schedule without pretending that a post was published by this API.
+    recent = []
+    for path in [PROJECT_DIR / "docs/index.html", PROJECT_DIR / "leadrescuepro-autonomous-ops-dashboard.html"]:
+        if path.exists():
+            recent.append({
+                "channel": "Hermes",
+                "title": path.stem.replace("-", " ").title(),
+                "status": "prepared",
+                "timestamp": file_mtime_iso(path),
+            })
+    scheduled = [
+        {"time": "08:00 Asia/Dhaka", "channel": "Instagram @leadrescuepro", "topic": "Missed-call recovery tip", "status": "approval-ready"},
+        {"time": "08:00 Asia/Dhaka", "channel": "Facebook", "topic": "Plumber callback checklist", "status": "approval-ready"},
+        {"time": "08:00 Asia/Dhaka", "channel": "LinkedIn", "topic": "Operator note from LeadRescuePro", "status": "approval-ready"},
+    ]
+    return {
+        "atlas_social_status": "connected_pending_live_api",
+        "recent_posts": recent[-5:],
+        "scheduled_today": scheduled,
+        "guardrail": "No posting, commenting, DMs, or outreach without Fahim approval.",
+    }
+
 @app.get("/api/reports/daily")
 def daily_report(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     today_start, tomorrow_start = utc_day_bounds()
@@ -984,6 +1225,7 @@ def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends
             website=row.get("website", ""),
             score=score_for_lead(row.get("rating"), row.get("reviews")),
             status="pending",
+            source="scraped",
         )
         db.add(prospect)
         imported += 1

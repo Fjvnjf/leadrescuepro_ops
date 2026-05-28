@@ -42,6 +42,7 @@ class Prospect(Base):
     website = Column(String(300), nullable=True)
     score = Column(String(5), default="B")  # A, B, C
     status = Column(String(30), default="pending")  # pending, called, contacted, callback_set, dnc
+    source = Column(String(40), default="manual")  # manual, scraped, hermes_reddit
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     last_contact = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)

@@ -526,6 +526,14 @@
               <div id="topCallers" class="bars"></div>
             </div>
           </article>
+          <article class="card span-6 admin-only">
+            <div class="card-head"><h3>Hermes agent status</h3><span id="hermesStatusPill">Checking</span></div>
+            <ul id="hermesStatusList" class="list"></ul>
+          </article>
+          <article class="card span-6 admin-only">
+            <div class="card-head"><h3>Alerts / system health</h3><span>Ops guard</span></div>
+            <ul id="systemHealthList" class="list"></ul>
+          </article>
         </div>
       </section>
 
@@ -555,9 +563,20 @@
           <div class="form-grid">
             <div class="field"><label>Search</label><input id="prospectSearch" placeholder="Business name"></div>
             <div class="field"><label>Status</label><select id="prospectStatus"><option value="">All</option><option value="pending">Pending</option><option value="called">Called</option><option value="contacted">Contacted</option><option value="callback_set">Callback set</option><option value="dnc">DNC</option></select></div>
+            <div class="field"><label>Source</label><select id="prospectSource"><option value="">All sources</option><option value="hermes_reddit">Hermes Reddit</option><option value="scraped">Scraped leads</option><option value="manual">Manual</option></select></div>
           </div>
         </div>
-        <div class="card table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Score</th><th>Status</th><th>Last contact</th></tr></thead><tbody id="prospectRows"></tbody></table></div>
+        <div class="grid" style="margin-bottom: 1rem;">
+          <article class="card span-6">
+            <div class="card-head"><h3>Hermes-discovered prospects</h3><span id="hermesProspectCount">0</span></div>
+            <ul id="hermesProspectList" class="list"></ul>
+          </article>
+          <article class="card span-6">
+            <div class="card-head"><h3>Scraped leads</h3><span id="scrapedProspectCount">0</span></div>
+            <ul id="scrapedProspectList" class="list"></ul>
+          </article>
+        </div>
+        <div class="card table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Source</th><th>Score</th><th>Status</th><th>Last contact</th><th>Assign</th></tr></thead><tbody id="prospectRows"></tbody></table></div>
       </section>
 
       <section id="callers" class="tab-panel">
@@ -570,7 +589,7 @@
             <button class="btn primary" type="submit">Create Caller</button>
             <div id="callerMessage" class="msg"></div>
           </form>
-          <div class="card table-wrap span-8"><table><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Today</th><th>Connect rate</th></tr></thead><tbody id="callerRows"></tbody></table></div>
+          <div class="card table-wrap span-8"><table><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Today</th><th>Today rate</th><th>All-time dials</th><th>All-time rate</th></tr></thead><tbody id="callerRows"></tbody></table></div>
         </div>
       </section>
 
@@ -592,7 +611,7 @@
             <div id="commissionMessage" class="msg"></div>
           </form>
           <div class="card span-8 table-wrap"><table><thead><tr><th>Caller</th><th>Deals</th><th>Total</th><th>Paid</th></tr></thead><tbody id="commissionSummary"></tbody></table></div>
-          <div class="card span-12 table-wrap"><table><thead><tr><th>ID</th><th>Caller</th><th>Deal</th><th>Commission</th><th>Status</th><th>Date</th></tr></thead><tbody id="commissionRows"></tbody></table></div>
+          <div class="card span-12 table-wrap"><table><thead><tr><th>ID</th><th>Caller</th><th>Deal</th><th>Commission</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody id="commissionRows"></tbody></table></div>
         </div>
       </section>
 
@@ -636,13 +655,7 @@
       <section id="social" class="tab-panel">
         <article class="card">
           <div class="card-head"><h3>Content calendar</h3><span>Atlas Social view</span></div>
-          <ul id="socialList" class="list">
-            <li><span class="pill cyan">Mon</span> Missed-call cost post - Facebook and Instagram</li>
-            <li><span class="pill green">Tue</span> SDR Loom permission script clip - LinkedIn</li>
-            <li><span class="pill amber">Wed</span> Callback checklist carousel - Instagram</li>
-            <li><span class="pill lime">Thu</span> Plumbing owner objection post - Facebook</li>
-            <li><span class="pill red">Fri</span> Weekly proof snapshot - hold for approval</li>
-          </ul>
+          <ul id="socialList" class="list"></ul>
         </article>
       </section>
       <datalist id="prospectNames"></datalist>
@@ -666,12 +679,13 @@
       ["revenue", "Revenue", "MRR, ARPU, churn, and payout picture.", "admin"],
       ["social", "Social", "Weekly organic content view.", "admin"]
     ];
-    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [] };
+    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [], callers: [] };
 
     const $ = (id) => document.getElementById(id);
     const money = (n) => "$" + Number(n || 0).toLocaleString();
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
     const disp = (s) => String(s || "").replaceAll("_", " ");
+    const sourceLabel = (s) => ({ hermes_reddit: "Hermes Reddit", scraped: "Scraped", manual: "Manual" }[s] || s || "Manual");
 
     async function api(path, options = {}) {
       const headers = { "abypass-tunnel-reminder": "1", ...(options.headers || {}) };
@@ -713,7 +727,7 @@
       try {
         $("apiStatus").textContent = "API online";
         await Promise.all([loadOverview(), loadProspects(), loadWeekly()]);
-        if (state.user?.role === "admin") await Promise.all([loadCallers(), loadCommissions(), loadClients(), loadRevenue()]);
+        if (state.user?.role === "admin") await Promise.all([loadCallers(), loadCommissions(), loadClients(), loadRevenue(), loadHermesStatus(), loadSocial()]);
       } catch (err) {
         $("apiStatus").textContent = "API issue";
         console.error(err);
@@ -721,7 +735,7 @@
     }
 
     function refreshTab(id) {
-      const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue };
+      const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue, social: loadSocial };
       if (map[id]) map[id]().catch(err => { $("apiStatus").textContent = err.message; });
     }
 
@@ -737,8 +751,27 @@
       if (state.user?.role === "admin") {
         const s = await api("/kpis/daily-summary").catch(() => null);
         if (s) $("dailySummary").textContent = s.text_block;
+        await loadHermesStatus();
       }
       await loadTodayCalls();
+    }
+
+    async function loadHermesStatus() {
+      if (state.user?.role !== "admin") return;
+      const h = await api("/hermes/status").catch(() => null);
+      if (!h) return;
+      $("hermesStatusPill").textContent = h.status || "unknown";
+      const lastReports = (h.last_reports || []).map(r => r.name || r.timestamp).join(", ") || "No local report files yet";
+      $("hermesStatusList").innerHTML = `
+        <li><div class="strong">Daily report</div><div class="muted">${esc(h.daily_report_schedule)} - ${esc(lastReports)}</div></li>
+        <li><div class="strong">Prospect search</div><div class="muted">${esc(h.daily_prospect_search?.status)} - ${h.daily_prospect_search?.hermes_reddit_count || 0} Hermes Reddit prospects</div></li>
+        <li><div class="strong">Social posting</div><div class="muted">${esc(h.social_content_posting?.status)} - ${esc(h.social_content_posting?.instagram)}</div></li>
+      `;
+      $("systemHealthList").innerHTML = `
+        <li><div class="strong">Backend / tunnel</div><div class="muted">${esc(h.tunnel?.configured_url)} with bypass header enabled</div></li>
+        <li><div class="strong">Cron jobs</div><div class="muted">${h.cron_jobs_found || 0} scheduled jobs tracked</div></li>
+        <li><div class="strong">MCP connections</div><div class="muted">${(h.mcp_connections || []).map(c => `${c.name}: ${c.status}`).join(" | ")}</div></li>
+      `;
     }
 
     async function loadTodayCalls() {
@@ -750,18 +783,50 @@
       const params = new URLSearchParams();
       if ($("prospectSearch").value) params.set("search", $("prospectSearch").value);
       if ($("prospectStatus").value) params.set("status", $("prospectStatus").value);
+      if ($("prospectSource").value) params.set("source", $("prospectSource").value);
       const data = await api("/prospects?" + params.toString());
       state.prospects = data.prospects || [];
+      if (state.user?.role === "admin" && !state.callers.length) {
+        const callers = await api("/callers").catch(() => ({ callers: [] }));
+        state.callers = callers.callers || [];
+      }
       $("prospectNames").innerHTML = state.prospects.map(p => `<option value="${esc(p.business_name)}">`).join("");
-      $("prospectRows").innerHTML = state.prospects.map(p => `<tr><td class="strong">${esc(p.business_name)}</td><td>${esc(p.phone)}</td><td>${esc(p.city || "")}, ${esc(p.state || "")}</td><td><span class="pill ${p.score === "A" ? "green" : p.score === "C" ? "red" : "amber"}">${esc(p.score || "B")}</span></td><td>${esc(p.status)}</td><td>${esc(p.last_contact || "-")}</td></tr>`).join("");
+      $("prospectRows").innerHTML = state.prospects.map(p => `<tr><td class="strong">${esc(p.business_name)}</td><td>${esc(p.phone)}</td><td>${esc(p.city || "")}, ${esc(p.state || "")}</td><td><span class="pill">${esc(sourceLabel(p.source))}</span></td><td><span class="pill ${p.score === "A" ? "green" : p.score === "C" ? "red" : "amber"}">${esc(p.score || "B")}</span></td><td>${esc(p.status)}</td><td>${esc(p.last_contact || "-")}</td><td>${state.user?.role === "admin" ? callerAssignSelect(p) : ""}</td></tr>`).join("");
+      await loadProspectSources();
+    }
+
+    function callerAssignSelect(p) {
+      const options = [`<option value="">Assign</option>`].concat(state.callers.map(c => `<option value="${c.id}" ${Number(p.assigned_to) === Number(c.id) ? "selected" : ""}>${esc(c.full_name || c.username)}</option>`)).join("");
+      return `<select aria-label="Assign prospect" onchange="assignProspect(${p.id}, this.value)">${options}</select>`;
+    }
+
+    async function assignProspect(id, callerId) {
+      if (!callerId) return;
+      await api(`/prospects/${id}/assign`, { method: "POST", body: JSON.stringify({ caller_id: Number(callerId) }) });
+      loadProspects();
+    }
+
+    async function loadProspectSources() {
+      const data = await api("/prospects/sources").catch(() => null);
+      if (!data) return;
+      const hermes = data.samples?.hermes_reddit || [];
+      const scraped = data.samples?.scraped || [];
+      $("hermesProspectCount").textContent = data.counts?.hermes_reddit || 0;
+      $("scrapedProspectCount").textContent = data.counts?.scraped || 0;
+      $("hermesProspectList").innerHTML = hermes.map(p => `<li><div class="strong">${esc(p.business_name)}</div><div class="muted">${esc(p.website || p.notes || "")}</div></li>`).join("") || `<li class="muted">No Hermes prospects loaded yet.</li>`;
+      $("scrapedProspectList").innerHTML = scraped.map(p => `<li><div class="strong">${esc(p.business_name)}</div><div class="muted">${esc(p.city || "")}, ${esc(p.state || "")} - ${esc(p.phone || "")}</div></li>`).join("") || `<li class="muted">No scraped leads loaded yet.</li>`;
     }
 
     async function loadCallers() {
       if (state.user?.role !== "admin") return;
       const data = await api("/callers");
+      state.callers = data.callers || [];
       const rows = await Promise.all((data.callers || []).map(async c => {
-        const k = await api(`/kpis/caller/${c.id}`).catch(() => ({}));
-        return `<tr><td class="strong">${esc(c.full_name)}</td><td>${esc(c.username)}</td><td><span class="pill green">Active</span></td><td>${k.dials_today || 0}</td><td>${k.connect_rate || 0}%</td></tr>`;
+        const [k, perf] = await Promise.all([
+          api(`/kpis/caller/${c.id}`).catch(() => ({})),
+          api(`/callers/${c.id}/performance`).catch(() => ({})),
+        ]);
+        return `<tr><td class="strong">${esc(c.full_name)}</td><td>${esc(c.username)}</td><td><span class="pill green">Active</span></td><td>${k.dials_today || 0}</td><td>${k.connect_rate || 0}%</td><td>${perf.total_dials || 0}</td><td>${perf.avg_connect_rate || 0}%</td></tr>`;
       }));
       $("callerRows").innerHTML = rows.join("");
     }
@@ -775,7 +840,13 @@
     async function loadCommissions() {
       const [list, summary] = await Promise.all([api("/commissions"), api("/commissions/summary")]);
       $("commissionSummary").innerHTML = (summary.summary || []).map(s => `<tr><td>${esc(s.name)}</td><td>${s.total_deals}</td><td>${money(s.total_commission)}</td><td>${s.paid_count}</td></tr>`).join("");
-      $("commissionRows").innerHTML = (list.commissions || []).map(c => `<tr><td>${c.id}</td><td>${c.caller_id}</td><td>${money(c.deal_amount)}</td><td>${money(c.commission_amount)}</td><td><span class="pill ${c.status === "paid" ? "green" : "amber"}">${esc(c.status)}</span></td><td>${esc(c.deal_date || "")}</td></tr>`).join("");
+      $("commissionRows").innerHTML = (list.commissions || []).map(c => `<tr><td>${c.id}</td><td>${c.caller_id}</td><td>${money(c.deal_amount)}</td><td>${money(c.commission_amount)}</td><td><span class="pill ${c.status === "paid" ? "green" : "amber"}">${esc(c.status)}</span></td><td>${esc(c.deal_date || "")}</td><td>${c.status === "paid" ? "" : `<button class="btn" type="button" onclick="markCommissionPaid(${c.id})">Mark paid</button>`}</td></tr>`).join("");
+    }
+
+    async function markCommissionPaid(id) {
+      await api(`/commissions/${id}`, { method: "PATCH", body: JSON.stringify({ status: "paid" }) });
+      loadCommissions();
+      loadRevenue();
     }
 
     async function loadClients() {
@@ -791,6 +862,19 @@
       $("revClients").textContent = r.active_clients || 0;
       $("revArpu").textContent = money(r.arpu);
       $("revChurn").textContent = (r.churn_rate || 0) + "%";
+    }
+
+    async function loadSocial() {
+      if (state.user?.role !== "admin") return;
+      const data = await api("/social/activity").catch(() => null);
+      if (!data) return;
+      const scheduled = (data.scheduled_today || []).map(item => `<li><span class="pill green">${esc(item.time)}</span> ${esc(item.channel)} - ${esc(item.topic)} <span class="muted">(${esc(item.status)})</span></li>`).join("");
+      const recent = (data.recent_posts || []).map(item => `<li><span class="pill amber">${esc(item.status)}</span> ${esc(item.title)} - ${esc(item.channel)} <span class="muted">${esc(item.timestamp || "")}</span></li>`).join("");
+      $("socialList").innerHTML = `
+        <li><div class="strong">Atlas Social</div><div class="muted">${esc(data.atlas_social_status)}. ${esc(data.guardrail)}</div></li>
+        ${scheduled || `<li class="muted">Nothing scheduled for today.</li>`}
+        ${recent || ""}
+      `;
     }
 
     function formData(form) {
@@ -856,6 +940,7 @@
 
     $("prospectSearch").addEventListener("input", () => loadProspects().catch(console.error));
     $("prospectStatus").addEventListener("change", () => loadProspects().catch(console.error));
+    $("prospectSource").addEventListener("change", () => loadProspects().catch(console.error));
     $("refreshBtn").addEventListener("click", refreshAll);
     $("logoutBtn").addEventListener("click", () => {
       localStorage.removeItem(TOKEN_KEY);
