@@ -56,7 +56,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "abypass-tunnel-reminder", "authorization", "content-type"],
+    allow_headers=["*", "abypass-tunnel-reminder", "bypass-tunnel-reminder", "authorization", "content-type"],
 )
 
 @app.middleware("http")

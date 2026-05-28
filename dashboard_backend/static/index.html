@@ -747,7 +747,7 @@
     }
 
     async function api(path, options = {}) {
-      const headers = { "abypass-tunnel-reminder": "1", ...(options.headers || {}) };
+      const headers = { "abypass-tunnel-reminder": "1", "bypass-tunnel-reminder": "1", ...(options.headers || {}) };
       if (state.token) headers.Authorization = "Bearer " + state.token;
       if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
       const res = await fetch(API_BASE + path, { ...options, headers });
@@ -762,7 +762,7 @@
     async function waitForBackend(retries = 8) {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-          await fetch(API_BASE + "/health", { headers: { "abypass-tunnel-reminder": "1" } });
+          await fetch(API_BASE + "/health", { headers: { "abypass-tunnel-reminder": "1", "bypass-tunnel-reminder": "1" } });
           $("apiStatus").textContent = "API online";
           return true;
         } catch {
