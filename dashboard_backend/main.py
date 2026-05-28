@@ -1071,11 +1071,12 @@ def hermes_status(db: Session = Depends(get_db), user: User = Depends(require_ad
         cron_output = f"crontab unavailable: {exc}"
     hermes_reddit_count = db.query(Prospect).filter(Prospect.source == "hermes_reddit").count()
     scraped_count = db.query(Prospect).filter(Prospect.source == "scraped").count()
-    tunnel_url = ""
-    for path in [PROJECT_DIR / "current_tunnel_url.txt", PROJECT_DIR / "docs/tunnel_url.txt"]:
+    tunnel_url = "https://lrp-dash.loca.lt"
+    for path in [PROJECT_DIR / "docs/dashboard_tunnel_url.txt", PROJECT_DIR / "docs/tunnel_url.txt"]:
         if path.exists():
-            tunnel_url = path.read_text(errors="ignore").strip()
-            if tunnel_url:
+            candidate_url = path.read_text(errors="ignore").strip()
+            if candidate_url:
+                tunnel_url = candidate_url
                 break
     return {
         "status": "active",
@@ -1109,7 +1110,7 @@ def hermes_status(db: Session = Depends(get_db), user: User = Depends(require_ad
             {"name": "Dashboard FastAPI", "status": "online"},
         ],
         "tunnel": {
-            "configured_url": tunnel_url or "https://lrp-dash.loca.lt",
+            "configured_url": tunnel_url,
             "bypass_header": "abypass-tunnel-reminder: 1",
         },
         "safe_scope_updated_at": file_mtime_iso(PROJECT_DIR / "00_safe_autonomous_scope.md"),
