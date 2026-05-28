@@ -17,3 +17,6 @@ voice_bridge.log
 guardian.log
 .env
 .git-credentials
+
+# Token files — don't accidentally commit these
+GITHUB-CREDS.md
