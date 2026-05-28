@@ -706,7 +706,8 @@
   <script>
     const TOKEN_KEY = "lrp_dashboard_token";
     const USER_KEY = "lrp_dashboard_user";
-    const API_BASE = location.hostname.includes("github.io") ? "https://lrp-dash.loca.lt/api" : "/api";
+    const DASHBOARD_TUNNEL_URL = "https://ordinary-moth-27.loca.lt";
+    const API_BASE = location.hostname.includes("github.io") ? `${DASHBOARD_TUNNEL_URL}/api` : "/api";
     const tabs = [
       ["overview", "Overview", "Live SDR activity, prospects, revenue, and execution queue.", "all"],
       ["calllog", "Call Log", "Log calls fast and keep the day clean.", "all"],
