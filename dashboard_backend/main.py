@@ -106,6 +106,11 @@ DISPOSITION_LABELS = {
 }
 
 CONNECT_DISPOSITIONS = {"voicemail", "talked_interested", "talked_not_interested", "callback_set"}
+PROSPECT_SOURCES = {"scraped", "manual", "hermes_reddit", "hermes_other", "imported"}
+PROSPECT_STATUSES = {"pending", "called", "contacted", "callback_set", "dnc"}
+CLIENT_STATUSES = {"active", "cancelled", "paused", "trial", "churned"}
+SDR_CANDIDATE_STAGES = {"applied", "shortlisted", "interviewed", "training", "active", "rejected", "blocked"}
+SDR_CANDIDATE_SOURCES = {"facebook", "upwork", "linkedin", "referral", "manual", "other"}
 
 def serialize(obj):
     """Convert SQLAlchemy object to dict"""
@@ -153,6 +158,69 @@ def score_for_lead(rating, reviews):
     if rating_val < 4.0 or reviews_val < 10:
         return "C"
     return "B"
+
+def require_text(value, field_name):
+    text_value = str(value or "").strip()
+    if not text_value:
+        raise HTTPException(status_code=400, detail=f"{field_name} required")
+    return text_value
+
+def parse_int_field(value, field_name, default=0, minimum=None, maximum=None):
+    if value is None or value == "":
+        parsed = default
+    else:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{field_name} must be an integer")
+    if parsed is None:
+        return None
+    if minimum is not None and parsed < minimum:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be at least {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be at most {maximum}")
+    return parsed
+
+def parse_float_field(value, field_name, default=0.0, minimum=None):
+    if value is None or value == "":
+        parsed = default
+    else:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{field_name} must be a number")
+    if parsed is None:
+        return None
+    if minimum is not None and parsed < minimum:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be at least {minimum}")
+    return parsed
+
+def parse_datetime_field(value, field_name):
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be an ISO datetime")
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+def validate_choice(value, field_name, allowed, default=None):
+    candidate = str(value if value is not None else default or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail=f"{field_name} required")
+    if candidate not in allowed:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be one of: {', '.join(sorted(allowed))}")
+    return candidate
+
+def normalize_pin(value, field_name="pin"):
+    pin = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}", pin):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be a 4-digit PIN")
+    return pin
 
 def file_mtime_iso(path: Path):
     if not path.exists():
@@ -372,8 +440,8 @@ def seed_csv_prospects(db: Session):
         city = " ".join(parts[:-1]).title() if len(parts) > 1 else ""
         with path.open(newline="", errors="ignore") as handle:
             for row in csv.DictReader(handle):
-                business_name = row.get("business_name") or row.get("name") or "Unknown"
-                phone = row.get("phone", "")
+                business_name = str(row.get("business_name") or row.get("name") or "Unknown").strip() or "Unknown"
+                phone = str(row.get("phone", "") or "").strip()
                 exists = db.query(Prospect).filter(
                     Prospect.business_name == business_name,
                     Prospect.phone == phone,
@@ -382,13 +450,19 @@ def seed_csv_prospects(db: Session):
                     if not exists.source or exists.source == "manual":
                         exists.source = "scraped"
                     continue
+                try:
+                    rating_value = float(row["rating"]) if row.get("rating") else None
+                    reviews_value = int(float(row["reviews"])) if row.get("reviews") else None
+                except (TypeError, ValueError):
+                    rating_value = None
+                    reviews_value = None
                 db.add(Prospect(
                     business_name=business_name,
                     phone=phone,
                     city=city,
                     state=state,
-                    rating=float(row["rating"]) if row.get("rating") else None,
-                    reviews=int(float(row["reviews"])) if row.get("reviews") else None,
+                    rating=rating_value,
+                    reviews=reviews_value,
                     website=row.get("website", ""),
                     score=score_for_lead(row.get("rating"), row.get("reviews")),
                     status="pending",
@@ -420,6 +494,9 @@ async def login(request: Request, username: str = Form(None), pin: str = Form(No
             pin = body.get("pin")
         except:
             pass
+    username = str(username or "").strip()
+    if not username or not re.fullmatch(r"\d{4}", str(pin or "").strip()):
+        raise HTTPException(status_code=400, detail="username and 4-digit PIN required")
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_pin(pin, user.pin_hash):
         raise HTTPException(status_code=401, detail="Invalid username or PIN")
@@ -444,6 +521,7 @@ def list_prospects(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    limit = max(1, min(limit, 500))
     query = db.query(Prospect)
     if user.role != "admin":
         query = query.filter(Prospect.assigned_to == user.id)
@@ -463,8 +541,18 @@ def list_prospects(
 
 @app.post("/api/prospects")
 def create_prospect(data: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    data.setdefault("source", "manual")
-    prospect = Prospect(**{k: v for k, v in data.items() if hasattr(Prospect, k)})
+    payload = {k: v for k, v in data.items() if hasattr(Prospect, k) and k != "id"}
+    payload["business_name"] = require_text(data.get("business_name") or data.get("name"), "business_name")
+    payload["source"] = validate_choice(data.get("source"), "source", PROSPECT_SOURCES, "manual")
+    if data.get("status"):
+        payload["status"] = validate_choice(data.get("status"), "status", PROSPECT_STATUSES)
+    if data.get("rating") not in (None, ""):
+        payload["rating"] = parse_float_field(data.get("rating"), "rating", minimum=0)
+    if data.get("reviews") not in (None, ""):
+        payload["reviews"] = parse_int_field(data.get("reviews"), "reviews", minimum=0)
+    if user.role != "admin":
+        payload["assigned_to"] = user.id
+    prospect = Prospect(**payload)
     db.add(prospect)
     db.commit()
     db.refresh(prospect)
@@ -475,8 +563,20 @@ def update_prospect(prospect_id: int, data: dict, db: Session = Depends(get_db),
     prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospect not found")
+    if user.role != "admin" and prospect.assigned_to != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     for k, v in data.items():
         if hasattr(Prospect, k) and k != "id":
+            if k == "business_name":
+                v = require_text(v, "business_name")
+            elif k == "source":
+                v = validate_choice(v, "source", PROSPECT_SOURCES)
+            elif k == "status":
+                v = validate_choice(v, "status", PROSPECT_STATUSES)
+            elif k == "rating":
+                v = parse_float_field(v, "rating", default=None, minimum=0)
+            elif k == "reviews":
+                v = parse_int_field(v, "reviews", default=None, minimum=0)
             setattr(prospect, k, v)
     if data.get("loom_sent") is True and not prospect.loom_sent_at:
         prospect.loom_sent_at = datetime.utcnow()
@@ -498,40 +598,48 @@ def delete_prospect(prospect_id: int, db: Session = Depends(get_db), user: User 
 @app.post("/api/prospects/import")
 def import_prospects(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """Import prospects from JSON array or CSV text"""
-    import csv
-    import io
     count = 0
     if isinstance(data.get("leads"), list):
         for item in data["leads"]:
+            business_name = require_text(item.get("business_name") or item.get("name"), "business_name")
+            phone = str(item.get("phone", "") or "").strip()
+            if db.query(Prospect).filter(Prospect.business_name == business_name, Prospect.phone == phone).first():
+                continue
             p = Prospect(
-                business_name=item.get("business_name", item.get("name", "Unknown")),
-                phone=item.get("phone", ""),
+                business_name=business_name,
+                phone=phone,
                 city=item.get("city", ""),
                 state=item.get("state", "TX"),
-                rating=item.get("rating"),
-                reviews=item.get("reviews"),
+                rating=parse_float_field(item.get("rating"), "rating", default=None, minimum=0),
+                reviews=parse_int_field(item.get("reviews"), "reviews", default=None, minimum=0),
                 website=item.get("website", ""),
                 score=item.get("score", "B"),
-                source=item.get("source", "manual"),
+                source=validate_choice(item.get("source"), "source", PROSPECT_SOURCES, "manual"),
             )
             db.add(p)
             count += 1
     elif data.get("csv"):
         reader = csv.DictReader(io.StringIO(data["csv"]))
         for row in reader:
+            business_name = require_text(row.get("business_name") or row.get("name"), "business_name")
+            phone = str(row.get("phone", "") or "").strip()
+            if db.query(Prospect).filter(Prospect.business_name == business_name, Prospect.phone == phone).first():
+                continue
             p = Prospect(
-                business_name=row.get("business_name", row.get("name", "Unknown")),
-                phone=row.get("phone", ""),
+                business_name=business_name,
+                phone=phone,
                 city=row.get("city", ""),
                 state=row.get("state", "TX"),
-                rating=float(row["rating"]) if row.get("rating") else None,
-                reviews=int(row["reviews"]) if row.get("reviews") else None,
+                rating=parse_float_field(row.get("rating"), "rating", default=None, minimum=0),
+                reviews=parse_int_field(row.get("reviews"), "reviews", default=None, minimum=0),
                 website=row.get("website", ""),
                 score=row.get("score", "B"),
-                source=row.get("source", "scraped"),
+                source=validate_choice(row.get("source"), "source", PROSPECT_SOURCES, "imported"),
             )
             db.add(p)
             count += 1
+    else:
+        raise HTTPException(status_code=400, detail="leads array or csv text required")
     db.commit()
     return {"imported": count}
 
@@ -548,13 +656,20 @@ async def import_prospects_csv(request: Request, db: Session = Depends(get_db), 
     reader = csv.DictReader(io.StringIO(csv_text))
     count = 0
     for row in reader:
+        business_name = require_text(row.get("business_name") or row.get("name"), "business_name")
+        phone = str(row.get("phone", "") or "").strip()
+        if db.query(Prospect).filter(Prospect.business_name == business_name, Prospect.phone == phone).first():
+            continue
         p = Prospect(
-            business_name=row.get("business_name", row.get("name", "Unknown")),
-            phone=row.get("phone", ""),
+            business_name=business_name,
+            phone=phone,
             city=row.get("city", ""),
             state=row.get("state", "TX"),
+            rating=parse_float_field(row.get("rating"), "rating", default=None, minimum=0),
+            reviews=parse_int_field(row.get("reviews"), "reviews", default=None, minimum=0),
+            website=row.get("website", ""),
             score=row.get("score", "B"),
-            source=row.get("source", "scraped"),
+            source=validate_choice(row.get("source"), "source", PROSPECT_SOURCES, "imported"),
         )
         db.add(p)
         count += 1
@@ -569,6 +684,7 @@ def assign_prospect(prospect_id: int, data: dict, db: Session = Depends(get_db),
     caller_id = data.get("caller_id")
     if not caller_id:
         raise HTTPException(status_code=400, detail="caller_id required")
+    caller_id = parse_int_field(caller_id, "caller_id", minimum=1)
     caller = db.query(User).filter(User.id == caller_id).first()
     if not caller:
         raise HTTPException(status_code=404, detail="Caller not found")
@@ -582,57 +698,77 @@ def assign_prospect(prospect_id: int, data: dict, db: Session = Depends(get_db),
 def log_call(data: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Auto-find or create prospect
     prospect_id = data.get("prospect_id")
-    if not prospect_id:
-        business = data.get("business_name", "").strip()
-        phone = data.get("phone", "").strip()
-        if business:
-            existing = db.query(Prospect).filter(
-                Prospect.business_name.ilike(f"%{business}%")
-            ).first()
-            if existing:
-                prospect_id = existing.id
-            else:
-                p = Prospect(business_name=business, phone=phone, status="pending", source="manual")
-                db.add(p)
-                db.flush()
-                prospect_id = p.id
+    business = str(data.get("business_name", "") or "").strip()
+    phone = str(data.get("phone", "") or "").strip()
+    disposition = validate_choice(data.get("disposition"), "disposition", set(DISPOSITION_LABELS), "voicemail")
+    prospect = None
+    if prospect_id:
+        prospect_id = parse_int_field(prospect_id, "prospect_id", minimum=1)
+        prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+        if not prospect:
+            raise HTTPException(status_code=404, detail="Prospect not found")
+        if user.role != "admin" and prospect.assigned_to not in (None, user.id):
+            raise HTTPException(status_code=403, detail="Not authorized for this prospect")
+        business = business or prospect.business_name
+        phone = phone or prospect.phone or ""
+    else:
+        business = require_text(business, "business_name")
+        existing_query = db.query(Prospect).filter(func.lower(Prospect.business_name) == business.lower())
+        if phone:
+            existing_query = existing_query.filter(Prospect.phone == phone)
+        existing = existing_query.first()
+        if existing:
+            if user.role != "admin" and existing.assigned_to not in (None, user.id):
+                raise HTTPException(status_code=403, detail="Not authorized for this prospect")
+            prospect = existing
+            prospect_id = existing.id
+        else:
+            prospect = Prospect(
+                business_name=business,
+                phone=phone,
+                status="pending",
+                source="manual",
+                assigned_to=user.id if user.role == "caller" else None,
+            )
+            db.add(prospect)
+            db.flush()
+            prospect_id = prospect.id
     
     # Parse call_time
     call_time = datetime.utcnow()
     if data.get("call_time"):
         try:
             call_time = datetime.fromisoformat(data["call_time"].replace("Z", "+00:00"))
+            if call_time.tzinfo:
+                call_time = call_time.astimezone(timezone.utc).replace(tzinfo=None)
         except:
             pass
     
     log = CallLog(
         prospect_id=prospect_id,
         caller_id=user.id,
-        business_name=data.get("business_name", ""),
-        phone=data.get("phone", ""),
-        disposition=data.get("disposition", "voicemail"),
+        business_name=business,
+        phone=phone,
+        disposition=disposition,
         notes=data.get("notes", ""),
-        duration_seconds=data.get("duration_seconds", 0),
+        duration_seconds=parse_int_field(data.get("duration_seconds"), "duration_seconds", default=0, minimum=0),
         call_time=call_time,
     )
     db.add(log)
     
     # Update prospect status
-    if prospect_id:
-        prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
-        if prospect:
-            disp = data.get("disposition", "")
-            if disp == "talked_interested":
-                prospect.status = "contacted"
-            elif disp == "callback_set":
-                prospect.status = "callback_set"
-            elif disp == "dnc" or disp == "wrong_number":
-                prospect.status = "dnc"
-            else:
-                prospect.status = "called"
-            prospect.last_contact = call_time
-            if not prospect.assigned_to and user.role == "caller":
-                prospect.assigned_to = user.id
+    if prospect:
+        if disposition == "talked_interested":
+            prospect.status = "contacted"
+        elif disposition == "callback_set":
+            prospect.status = "callback_set"
+        elif disposition == "dnc" or disposition == "wrong_number":
+            prospect.status = "dnc"
+        else:
+            prospect.status = "called"
+        prospect.last_contact = call_time
+        if not prospect.assigned_to and user.role == "caller":
+            prospect.assigned_to = user.id
     
     db.commit()
     db.refresh(log)
@@ -647,6 +783,7 @@ def list_calls(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    limit = max(1, min(limit, 500))
     query = db.query(CallLog)
     if user.role != "admin":
         query = query.filter(CallLog.caller_id == user.id)
@@ -670,10 +807,12 @@ def list_calls(
 def today_calls(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     today_start, tomorrow_start = utc_day_bounds()
     query = db.query(CallLog).filter(
-        CallLog.caller_id == user.id,
         CallLog.call_time >= today_start,
         CallLog.call_time < tomorrow_start
-    ).order_by(CallLog.call_time.desc()).limit(200)
+    )
+    if user.role != "admin":
+        query = query.filter(CallLog.caller_id == user.id)
+    query = query.order_by(CallLog.call_time.desc()).limit(200)
     return {"calls": [serialize(c) for c in query.all()]}
 
 @app.get("/api/calls/export")
@@ -705,6 +844,8 @@ async def upload_recording(call_id: int, file: UploadFile = File(...), db: Sessi
     call = db.query(CallLog).filter(CallLog.id == call_id).first()
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
+    if user.role != "admin" and call.caller_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     ext = file.filename.split(".")[-1] if "." in file.filename else "webm"
     filename = f"call_{call_id}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = UPLOAD_DIR / filename
@@ -720,6 +861,8 @@ def transcribe_call(call_id: int, db: Session = Depends(get_db), user: User = De
     call = db.query(CallLog).filter(CallLog.id == call_id).first()
     if not call or not call.recording_path:
         raise HTTPException(status_code=404, detail="Call or recording not found")
+    if user.role != "admin" and call.caller_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     if not os.path.exists(call.recording_path):
         raise HTTPException(status_code=404, detail="Recording file not found")
     
@@ -945,16 +1088,18 @@ def create_commission(data: dict, db: Session = Depends(get_db), user: User = De
     caller_id = data.get("caller_id")
     if not caller_id:
         raise HTTPException(status_code=400, detail="caller_id required")
+    caller_id = parse_int_field(caller_id, "caller_id", minimum=1)
     caller = db.query(User).filter(User.id == caller_id).first()
     if not caller:
         raise HTTPException(status_code=404, detail="Caller not found")
     
-    deal_amt = data.get("deal_amount", 1496.0)
+    deal_amt = parse_float_field(data.get("deal_amount"), "deal_amount", default=1496.0, minimum=0)
+    prospect_id = parse_int_field(data.get("prospect_id"), "prospect_id", default=None, minimum=1)
     commission = Commission(
         caller_id=caller_id,
-        prospect_id=data.get("prospect_id"),
+        prospect_id=prospect_id,
         deal_amount=deal_amt,
-        commission_amount=data.get("commission_amount", 100.0),
+        commission_amount=parse_float_field(data.get("commission_amount"), "commission_amount", default=100.0, minimum=0),
         notes=data.get("notes", ""),
     )
     db.add(commission)
@@ -970,6 +1115,13 @@ def update_commission(comm_id: int, data: dict, db: Session = Depends(get_db), u
     if data.get("status") == "paid":
         comm.status = "paid"
         comm.paid_date = datetime.utcnow()
+    elif data.get("status") == "pending":
+        comm.status = "pending"
+        comm.paid_date = None
+    if "deal_amount" in data:
+        comm.deal_amount = parse_float_field(data.get("deal_amount"), "deal_amount", minimum=0)
+    if "commission_amount" in data:
+        comm.commission_amount = parse_float_field(data.get("commission_amount"), "commission_amount", minimum=0)
     if "notes" in data:
         comm.notes = data["notes"]
     db.commit()
@@ -1012,6 +1164,12 @@ def commission_summary(db: Session = Depends(get_db), user: User = Depends(get_c
 # ── Recording Routes ─────────────────────────────────────────────────────
 @app.post("/api/recordings/upload")
 async def upload_recording_file(file: UploadFile = File(...), call_id: int = Form(default=0), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if call_id:
+        call = db.query(CallLog).filter(CallLog.id == call_id).first()
+        if not call:
+            raise HTTPException(status_code=404, detail="Call not found")
+        if user.role != "admin" and call.caller_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
     ext = file.filename.split(".")[-1] if "." in file.filename else "webm"
     filename = f"rec_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = UPLOAD_DIR / filename
@@ -1035,6 +1193,8 @@ def play_recording(rec_id: int, db: Session = Depends(get_db), user: User = Depe
     rec = db.query(Recording).filter(Recording.id == rec_id).first()
     if not rec or not os.path.exists(rec.file_path):
         raise HTTPException(status_code=404, detail="Recording not found")
+    if user.role != "admin" and rec.caller_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     return FileResponse(rec.file_path)
 
 @app.post("/api/recordings/{rec_id}/transcribe")
@@ -1042,6 +1202,8 @@ def transcribe_recording(rec_id: int, db: Session = Depends(get_db), user: User 
     rec = db.query(Recording).filter(Recording.id == rec_id).first()
     if not rec or not os.path.exists(rec.file_path):
         raise HTTPException(status_code=404, detail="Recording not found")
+    if user.role != "admin" and rec.caller_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     
     model = get_whisper()
     if not model:
@@ -1070,11 +1232,9 @@ def list_callers(db: Session = Depends(get_db), user: User = Depends(require_adm
 
 @app.post("/api/callers")
 def create_caller(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    username = data.get("username")
-    pin = data.get("pin", "1234")
-    full_name = data.get("full_name", "")
-    if not username:
-        raise HTTPException(status_code=400, detail="username required")
+    username = require_text(data.get("username"), "username")
+    pin = normalize_pin(data.get("pin", "1234"))
+    full_name = str(data.get("full_name", "") or "").strip()
     existing = db.query(User).filter(User.username == username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -1094,9 +1254,9 @@ def update_caller(caller_id: int, data: dict, db: Session = Depends(get_db), use
     if "active" in data:
         caller.active = bool(data["active"])
     if "full_name" in data:
-        caller.full_name = data["full_name"]
+        caller.full_name = str(data["full_name"] or "").strip()
     if "pin" in data and data["pin"]:
-        caller.pin_hash = hash_pin(str(data["pin"]))
+        caller.pin_hash = hash_pin(normalize_pin(data["pin"]))
     db.commit()
     db.refresh(caller)
     return serialize_user(caller)
@@ -1141,16 +1301,14 @@ def list_sdr_candidates(stage: str = Query(None), db: Session = Depends(get_db),
 
 @app.post("/api/sdr-candidates")
 def create_sdr_candidate(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    name = (data.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="name required")
+    name = require_text(data.get("name"), "name")
     candidate = SdrCandidate(
         name=name,
         email=data.get("email", ""),
         phone=data.get("phone", ""),
         country=data.get("country", "Bangladesh"),
-        stage=data.get("stage", "applied"),
-        source=data.get("source", "facebook"),
+        stage=validate_choice(data.get("stage"), "stage", SDR_CANDIDATE_STAGES, "applied"),
+        source=validate_choice(data.get("source"), "source", SDR_CANDIDATE_SOURCES, "facebook"),
         notes=data.get("notes", ""),
     )
     db.add(candidate)
@@ -1165,6 +1323,14 @@ def update_sdr_candidate(candidate_id: int, data: dict, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Candidate not found")
     for key, value in data.items():
         if hasattr(SdrCandidate, key) and key != "id":
+            if key == "name":
+                value = require_text(value, "name")
+            elif key == "stage":
+                value = validate_choice(value, "stage", SDR_CANDIDATE_STAGES)
+            elif key == "source":
+                value = validate_choice(value, "source", SDR_CANDIDATE_SOURCES)
+            elif key in {"applied_date", "created_at"}:
+                value = parse_datetime_field(value, key)
             setattr(candidate, key, value)
     db.commit()
     db.refresh(candidate)
@@ -1187,9 +1353,8 @@ def list_clients(db: Session = Depends(get_db), user: User = Depends(require_adm
 
 @app.post("/api/clients")
 def create_client(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    business_name = (data.get("business_name") or data.get("company_name") or "").strip()
-    if not business_name:
-        raise HTTPException(status_code=400, detail="company_name required")
+    business_name = require_text(data.get("business_name") or data.get("company_name"), "company_name")
+    started_at = parse_datetime_field(data.get("started_at") or data.get("start_date"), "start_date") or datetime.utcnow()
     client = Client(
         business_name=business_name,
         owner_name=data.get("owner_name", data.get("contact_name", "")),
@@ -1198,11 +1363,12 @@ def create_client(data: dict, db: Session = Depends(get_db), user: User = Depend
         city=data.get("city", ""),
         state=data.get("state", "TX"),
         onboarding_stage=data.get("onboarding_stage", data.get("onboarding_progress", "new")),
-        subscription_status=data.get("subscription_status", "active"),
-        setup_fee=float(data.get("setup_fee", 997.0) or 0),
-        monthly_revenue=float(data.get("monthly_revenue", 499.0) or 0),
-        usage_minutes=int(data.get("usage_minutes", 0) or 0),
-        usage_rate=float(data.get("usage_rate", 0.5) or 0),
+        subscription_status=validate_choice(data.get("subscription_status"), "subscription_status", CLIENT_STATUSES, "active"),
+        setup_fee=parse_float_field(data.get("setup_fee"), "setup_fee", default=997.0, minimum=0),
+        monthly_revenue=parse_float_field(data.get("monthly_revenue"), "monthly_revenue", default=499.0, minimum=0),
+        usage_minutes=parse_int_field(data.get("usage_minutes"), "usage_minutes", default=0, minimum=0),
+        usage_rate=parse_float_field(data.get("usage_rate"), "usage_rate", default=0.5, minimum=0),
+        started_at=started_at,
         notes=data.get("notes", ""),
     )
     db.add(client)
@@ -1224,9 +1390,21 @@ def update_client(client_id: int, data: dict, db: Session = Depends(get_db), use
     for key, value in data.items():
         key = aliases.get(key, key)
         if hasattr(Client, key) and key != "id":
+            if key == "business_name":
+                value = require_text(value, "company_name")
+            elif key == "subscription_status":
+                value = validate_choice(value, "subscription_status", CLIENT_STATUSES)
+            elif key in {"setup_fee", "monthly_revenue", "usage_rate"}:
+                value = parse_float_field(value, key, minimum=0)
+            elif key == "usage_minutes":
+                value = parse_int_field(value, key, minimum=0)
+            elif key in {"started_at", "churned_at", "created_at"}:
+                value = parse_datetime_field(value, key)
             setattr(client, key, value)
     if data.get("subscription_status") in {"cancelled", "churned"} and not client.churned_at:
         client.churned_at = datetime.utcnow()
+    if data.get("subscription_status") in {"active", "trial", "paused"}:
+        client.churned_at = None
     db.commit()
     db.refresh(client)
     return serialize_client(client)
@@ -1289,7 +1467,10 @@ def delete_client(client_id: int, db: Session = Depends(get_db), user: User = De
 
 @app.get("/api/prospects/sources")
 def prospect_source_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    query = db.query(Prospect.source, func.count(Prospect.id)).group_by(Prospect.source)
+    query = db.query(Prospect.source, func.count(Prospect.id))
+    if user.role != "admin":
+        query = query.filter(Prospect.assigned_to == user.id)
+    query = query.group_by(Prospect.source)
     rows = query.all()
     counts = {row[0] or "manual": row[1] for row in rows}
     samples = {}
@@ -1377,7 +1558,10 @@ def hermes_sessions(limit: int = Query(20), user: User = Depends(require_admin))
         tables = hermes_tables(conn)
         if "sessions" in tables:
             columns = hermes_table_columns(conn, "sessions")
-            order_col = "updated_at" if "updated_at" in columns else "created_at" if "created_at" in columns else "id"
+            order_col = next(
+                (col for col in ["updated_at", "ended_at", "started_at", "created_at", "id"] if col in columns),
+                "id",
+            )
             rows = conn.execute(f"select * from sessions order by {order_col} desc limit ?", (limit,)).fetchall()
             sessions = [dict(row) for row in rows]
         elif "messages" in tables:
@@ -1448,16 +1632,51 @@ def hermes_usage(user: User = Depends(require_admin)):
         if "sessions" in tables:
             columns = hermes_table_columns(conn, "sessions")
             model_col = "model" if "model" in columns else "model_name" if "model_name" in columns else None
-            cost_col = "cost" if "cost" in columns else "total_cost" if "total_cost" in columns else None
-            token_col = "total_tokens" if "total_tokens" in columns else "token_count" if "token_count" in columns else None
-            if model_col and (cost_col or token_col):
-                select_cost = f"coalesce(sum({cost_col}), 0)" if cost_col else "0"
-                select_tokens = f"coalesce(sum({token_col}), 0)" if token_col else "0"
+            cost_terms = [col for col in ["actual_cost_usd", "estimated_cost_usd", "total_cost", "cost"] if col in columns]
+            if "actual_cost_usd" in columns and "estimated_cost_usd" in columns:
+                cost_expr = "coalesce(actual_cost_usd, estimated_cost_usd, 0)"
+            elif cost_terms:
+                cost_expr = f"coalesce({cost_terms[0]}, 0)"
+            else:
+                cost_expr = "0"
+            token_terms = [col for col in ["total_tokens", "token_count"] if col in columns]
+            if not token_terms:
+                token_terms = [col for col in ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens"] if col in columns]
+            token_expr = " + ".join(f"coalesce({col}, 0)" for col in token_terms) if token_terms else "0"
+            input_expr = "coalesce(input_tokens, 0)" if "input_tokens" in columns else "0"
+            output_expr = "coalesce(output_tokens, 0)" if "output_tokens" in columns else "0"
+            time_col = next((col for col in ["started_at", "created_at", "updated_at"] if col in columns), None)
+            if token_terms:
+                totals = conn.execute(
+                    f"select coalesce(sum({token_expr}), 0) as total, coalesce(sum({input_expr}), 0) as input, coalesce(sum({output_expr}), 0) as output, coalesce(sum({cost_expr}), 0) as cost from sessions"
+                ).fetchone()
+                if int(totals["total"] or 0) > 0:
+                    usage["total_tokens"] = int(totals["total"] or 0)
+                    usage["input_tokens"] = int(totals["input"] or 0)
+                    usage["output_tokens"] = int(totals["output"] or 0)
+                    usage["cost_total"] = round(float(totals["cost"] or 0), 4)
+            if model_col and (cost_terms or token_terms):
                 rows = conn.execute(
-                    f"select {model_col} as model, {select_tokens} as tokens, {select_cost} as cost from sessions group by {model_col} order by tokens desc"
+                    f"select coalesce({model_col}, 'unknown') as model, coalesce(sum({token_expr}), 0) as tokens, coalesce(sum({cost_expr}), 0) as cost from sessions group by {model_col} order by tokens desc"
                 ).fetchall()
                 usage["by_model"] = [dict(row) for row in rows]
-                usage["cost_total"] = round(sum(float(row["cost"] or 0) for row in rows), 4)
+                if cost_terms:
+                    usage["cost_total"] = round(sum(float(row["cost"] or 0) for row in rows), 4)
+            if time_col and token_terms:
+                daily_rows = conn.execute(
+                    f"""
+                    select date({time_col}, 'unixepoch') as day,
+                           coalesce(sum({token_expr}), 0) as tokens,
+                           coalesce(sum({cost_expr}), 0) as cost
+                      from sessions
+                     where {time_col} >= ?
+                     group by day
+                     order by day
+                    """,
+                    (since_ts,),
+                ).fetchall()
+                if daily_rows:
+                    usage["daily"] = [dict(row) for row in daily_rows]
         usage["window"] = {"days": 30, "since": datetime.utcfromtimestamp(since_ts).isoformat(), "now": datetime.utcfromtimestamp(now_ts).isoformat()}
         return usage
     finally:
@@ -1498,8 +1717,12 @@ def hermes_files(path: str = Query(None), user: User = Depends(require_admin)):
                 "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
             })
         return {"path": str(resolved), "parent": parent, "is_dir": True, "entries": entries, "allowed_roots": allowed_roots}
-    text_content = resolved.read_text(errors="ignore")
     max_chars = 200_000
+    try:
+        with resolved.open("r", encoding="utf-8", errors="ignore") as handle:
+            text_content = handle.read(max_chars + 1)
+    except OSError:
+        raise HTTPException(status_code=400, detail="File could not be read")
     return {
         "path": str(resolved),
         "parent": parent,
@@ -1736,7 +1959,7 @@ def health():
 def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     city = (data.get("city") or "").strip()
     state = (data.get("state") or "TX").strip().upper()
-    limit = int(data.get("limit", 30) or 30)
+    limit = parse_int_field(data.get("limit"), "limit", default=30, minimum=1, maximum=200)
     if not city:
         raise HTTPException(status_code=400, detail="city required")
 
@@ -1764,8 +1987,8 @@ def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends
     imported = 0
     reader = csv.DictReader(io.StringIO(completed.stdout))
     for row in reader:
-        business_name = row.get("business_name") or row.get("name") or "Unknown"
-        phone = row.get("phone", "")
+        business_name = require_text(row.get("business_name") or row.get("name"), "business_name")
+        phone = str(row.get("phone", "") or "").strip()
         existing = db.query(Prospect).filter(Prospect.business_name == business_name, Prospect.phone == phone).first()
         if existing:
             continue
@@ -1774,8 +1997,8 @@ def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends
             phone=phone,
             city=city,
             state=state,
-            rating=float(row["rating"]) if row.get("rating") else None,
-            reviews=int(float(row["reviews"])) if row.get("reviews") else None,
+            rating=parse_float_field(row.get("rating"), "rating", default=None, minimum=0),
+            reviews=parse_int_field(row.get("reviews"), "reviews", default=None, minimum=0),
             website=row.get("website", ""),
             score=score_for_lead(row.get("rating"), row.get("reviews")),
             status="pending",
@@ -1796,7 +2019,12 @@ def scrape_leads(data: dict, db: Session = Depends(get_db), user: User = Depends
 @app.post("/api/webhooks/voiply")
 @app.post("/api/voiply/webhook")
 async def voiply_webhook(request: Request, db: Session = Depends(get_db)):
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON body required")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON object required")
     phone = payload.get("phone") or payload.get("from") or payload.get("caller_id") or ""
     business = payload.get("business_name") or payload.get("name") or "Voiply Call"
     disposition = payload.get("disposition") or "voicemail"
@@ -1809,7 +2037,7 @@ async def voiply_webhook(request: Request, db: Session = Depends(get_db)):
         phone=phone,
         disposition=disposition if disposition in DISPOSITION_LABELS else "voicemail",
         notes=json.dumps(payload)[:2000],
-        duration_seconds=int(payload.get("duration_seconds", payload.get("duration", 0)) or 0),
+        duration_seconds=parse_int_field(payload.get("duration_seconds", payload.get("duration", 0)), "duration_seconds", default=0, minimum=0),
     )
     db.add(log)
     db.commit()

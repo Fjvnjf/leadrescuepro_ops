@@ -10,9 +10,8 @@
   <script>
     window.LRP_DASHBOARD_CONFIG = {
       // Update this whenever the public API tunnel changes.
-      DASHBOARD_TUNNEL_URL: "https://museum-morgan-cooperation-relatively.trycloudflare.com"
+      DASHBOARD_TUNNEL_URL: "https://long-tagged-fixtures-forge.trycloudflare.com"
     };
-    const DASHBOARD_TUNNEL_URL = window.LRP_DASHBOARD_CONFIG.DASHBOARD_TUNNEL_URL;
   </script>
   <style>
     :root {
@@ -887,7 +886,7 @@
             <h3>Terminal</h3>
             <div class="form-grid">
               <div class="field"><label for="terminalCommand">Command</label><input id="terminalCommand" name="command" value="ls -la" required></div>
-              <div class="field"><label for="terminalCwd">Working directory</label><input id="terminalCwd" name="cwd" value="." placeholder="Project root by default"></div>
+              <div class="field"><label for="terminalCwd">Working directory</label><input id="terminalCwd" name="cwd" placeholder="Project root"></div>
             </div>
             <button class="btn primary" type="submit">Run</button>
             <div id="terminalMessage" class="msg"></div>
@@ -973,7 +972,8 @@
     async function waitForBackend(retries = 8) {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-          await fetch(API_BASE + "/health", { headers: { "abypass-tunnel-reminder": "1", "bypass-tunnel-reminder": "1" } });
+          const res = await fetch(API_BASE + "/health", { headers: { "abypass-tunnel-reminder": "1", "bypass-tunnel-reminder": "1" } });
+          if (!res.ok) throw new Error(`Health check returned ${res.status}`);
           $("apiStatus").textContent = "API online";
           return true;
         } catch {
@@ -1287,6 +1287,8 @@
       $("fileBrowserTitle").textContent = data.path || path;
       $("fileBrowserMeta").textContent = data.is_dir ? `${(data.entries || []).length} entries` : formatBytes(data.size);
       if (data.is_dir) {
+        $("fileContent").textContent = "Select a file to preview it.";
+        $("fileContentMeta").textContent = "No file selected";
         const parentButton = data.parent && data.parent !== data.path ? `<button class="file-entry" type="button" onclick="openHermesPath('${encodeURIComponent(data.parent)}')"><span>..</span><small>Parent</small></button>` : "";
         const entries = (data.entries || []).map(entry => `<button class="file-entry" type="button" onclick="openHermesPath('${encodeURIComponent(entry.path)}')"><span>${entry.is_dir ? "Folder" : "File"} ${esc(entry.name)}</span><small>${entry.is_dir ? "Directory" : formatBytes(entry.size)}</small></button>`).join("");
         $("fileBrowserEntries").innerHTML = parentButton + entries || `<div class="muted">No files found.</div>`;

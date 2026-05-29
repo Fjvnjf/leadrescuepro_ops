@@ -24,13 +24,15 @@ def _make_salt():
     return secrets.token_hex(16)
 
 def hash_pin(pin: str) -> str:
+    pin = str(pin or "").strip()
     salt = _make_salt()
     h = hashlib.sha256((salt + pin).encode()).hexdigest()
     return f"{salt}${h}"
 
 def verify_pin(pin: str, stored: str) -> bool:
-    if "$" not in stored:
+    if pin is None or not stored or "$" not in stored:
         return False
+    pin = str(pin).strip()
     salt, expected = stored.split("$", 1)
     h = hashlib.sha256((salt + pin).encode()).hexdigest()
     return h == expected
