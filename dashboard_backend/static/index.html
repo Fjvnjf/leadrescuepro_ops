@@ -7,6 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script>
+    window.LRP_DASHBOARD_CONFIG = {
+      // Update this whenever the public API tunnel changes.
+      DASHBOARD_TUNNEL_URL: "https://postal-configurations-coated-hats.trycloudflare.com"
+    };
+  </script>
   <style>
     :root {
       --bg: #02040a;
@@ -439,6 +445,103 @@
       min-width: 3px;
     }
 
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.8rem;
+      padding: 1rem;
+    }
+
+    .mini-stat {
+      min-height: 88px;
+      padding: 0.85rem;
+      border: 1px solid rgba(49, 215, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(3, 9, 18, 0.72);
+    }
+
+    .mini-stat b {
+      display: block;
+      margin-top: 0.25rem;
+      color: var(--text);
+      font-size: 1.35rem;
+    }
+
+    .chat-window {
+      display: grid;
+      gap: 0.75rem;
+      max-height: 54vh;
+      overflow-y: auto;
+      padding: 1rem;
+      background: rgba(3, 9, 18, 0.42);
+    }
+
+    .chat-line {
+      display: flex;
+    }
+
+    .chat-line.user { justify-content: flex-end; }
+
+    .bubble {
+      width: min(82%, 760px);
+      padding: 0.8rem 0.9rem;
+      border: 1px solid rgba(49, 215, 255, 0.25);
+      border-radius: 14px;
+      color: var(--text);
+      background: rgba(10, 23, 38, 0.86);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-line.user .bubble {
+      border-color: rgba(49, 215, 255, 0.65);
+      color: #00111b;
+      background: linear-gradient(135deg, var(--cyan), var(--green));
+    }
+
+    .code-box {
+      min-height: 180px;
+      max-height: 54vh;
+      margin: 0;
+      padding: 1rem;
+      overflow: auto;
+      color: #dff6ff;
+      background: #020812;
+      border-top: 1px solid var(--line);
+      font: 0.86rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
+    .file-list {
+      display: grid;
+      gap: 0.45rem;
+      padding: 1rem;
+    }
+
+    .file-entry {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid rgba(49, 215, 255, 0.18);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      color: var(--text);
+      background: rgba(3, 9, 18, 0.72);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .file-entry small {
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .terminal-output {
+      min-height: 280px;
+    }
+
     .mobile-tabs {
       display: none;
       position: fixed;
@@ -460,19 +563,22 @@
       font-size: 0.78rem;
     }
 
-    @media (max-width: 1050px) {
+    @media (max-width: 860px) {
       .app { grid-template-columns: 1fr; }
       .sidebar { display: none; }
       .mobile-tabs { display: flex; }
       .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
       .topbar { align-items: flex-start; flex-direction: column; }
+      .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 520px) {
       .main { padding: 0.8rem 0.8rem 5rem; }
       .grid { gap: 0.75rem; }
       .card { border-radius: 14px; }
       .form-grid { grid-template-columns: 1fr; }
+      .mini-grid { grid-template-columns: 1fr; }
+      .bubble { width: 100%; }
       table { min-width: 720px; }
       .brand h1 { font-size: 1rem; }
     }
@@ -697,6 +803,88 @@
           <ul id="socialList" class="list"></ul>
         </article>
       </section>
+
+      <section id="hermeschat" class="tab-panel admin-only">
+        <div class="grid">
+          <article class="card span-12">
+            <div class="card-head"><h3>Hermes Chat</h3><span id="hermesChatStatus">REST bridge</span></div>
+            <div id="hermesChatWindow" class="chat-window"></div>
+            <form id="hermesChatForm" class="pad">
+              <div class="field">
+                <label for="hermesMessage">Message Hermes</label>
+                <textarea id="hermesMessage" name="message" placeholder="Ask Hermes about prospects, SDR ops, social content, or system state." required></textarea>
+              </div>
+              <button class="btn primary" type="submit">Send</button>
+              <div id="hermesChatMessage" class="msg"></div>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <section id="systemusage" class="tab-panel admin-only">
+        <div class="grid">
+          <article class="card span-12">
+            <div class="card-head"><h3>System / Usage</h3><span id="systemUsageStatus">Live Hermes files</span></div>
+            <div id="systemUsageStats" class="mini-grid"></div>
+          </article>
+          <article class="card span-4">
+            <div class="card-head"><h3>Providers</h3><span id="providerCount">0</span></div>
+            <ul id="providerList" class="list"></ul>
+          </article>
+          <article class="card span-4">
+            <div class="card-head"><h3>Skills</h3><span id="skillCount">0</span></div>
+            <ul id="skillList" class="list"></ul>
+          </article>
+          <article class="card span-4">
+            <div class="card-head"><h3>Cron Jobs</h3><span id="cronCount">0</span></div>
+            <ul id="cronList" class="list"></ul>
+          </article>
+          <article class="card span-12">
+            <div class="card-head"><h3>Recent Hermes Logs</h3><span>agent.log tail</span></div>
+            <pre id="hermesLogOutput" class="code-box"></pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="filebrowser" class="tab-panel admin-only">
+        <div class="grid">
+          <article class="card pad span-4">
+            <h3>File Browser</h3>
+            <div class="field">
+              <label for="fileBrowserPath">Path</label>
+              <input id="fileBrowserPath" value=".">
+            </div>
+            <button id="fileBrowserGo" class="btn primary" type="button">Open Path</button>
+            <div id="fileBrowserMessage" class="msg"></div>
+          </article>
+          <article class="card span-8">
+            <div class="card-head"><h3 id="fileBrowserTitle">~/leadrescuepro_ops</h3><span id="fileBrowserMeta">Ready</span></div>
+            <div id="fileBrowserEntries" class="file-list"></div>
+          </article>
+          <article class="card span-12">
+            <div class="card-head"><h3>File Contents</h3><span id="fileContentMeta">Select a file</span></div>
+            <pre id="fileContent" class="code-box">No file selected.</pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="terminal" class="tab-panel admin-only">
+        <div class="grid">
+          <form id="terminalForm" class="card pad span-12">
+            <h3>Terminal</h3>
+            <div class="form-grid">
+              <div class="field"><label for="terminalCommand">Command</label><input id="terminalCommand" name="command" value="ls -la" required></div>
+              <div class="field"><label for="terminalCwd">Working directory</label><input id="terminalCwd" name="cwd" value="."></div>
+            </div>
+            <button class="btn primary" type="submit">Run</button>
+            <div id="terminalMessage" class="msg"></div>
+          </form>
+          <article class="card span-12">
+            <div class="card-head"><h3>Output</h3><span id="terminalMeta">30s timeout</span></div>
+            <pre id="terminalOutput" class="code-box terminal-output">No command run yet.</pre>
+          </article>
+        </div>
+      </section>
       <datalist id="prospectNames"></datalist>
     </main>
     <nav id="mobileNav" class="mobile-tabs"></nav>
@@ -704,10 +892,11 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
+    const DASHBOARD_CONFIG = window.LRP_DASHBOARD_CONFIG || {};
+    const DASHBOARD_TUNNEL_URL = DASHBOARD_CONFIG.DASHBOARD_TUNNEL_URL || "";
     const TOKEN_KEY = "lrp_dashboard_token";
     const USER_KEY = "lrp_dashboard_user";
-    const DASHBOARD_TUNNEL_URL = "https://postal-configurations-coated-hats.trycloudflare.com";
-    const API_BASE = location.hostname.includes("github.io") ? `${DASHBOARD_TUNNEL_URL}/api` : "/api";
+    const API_BASE = location.hostname.includes("github.io") && DASHBOARD_TUNNEL_URL ? `${DASHBOARD_TUNNEL_URL}/api` : "/api";
     const tabs = [
       ["overview", "Overview", "Live SDR activity, prospects, revenue, and execution queue.", "all"],
       ["calllog", "Call Log", "Log calls fast and keep the day clean.", "all"],
@@ -718,9 +907,13 @@
       ["scraper", "Scraper", "Generate new plumber leads.", "admin"],
       ["clients", "Clients", "Client onboarding and subscription status.", "admin"],
       ["revenue", "Revenue", "MRR, ARPU, churn, and payout picture.", "admin"],
-      ["social", "Social", "Weekly organic content view.", "admin"]
+      ["social", "Social", "Weekly organic content view.", "admin"],
+      ["hermeschat", "Hermes Chat", "Talk to the local Hermes agent through FastAPI.", "admin"],
+      ["systemusage", "System / Usage", "Tokens, providers, skills, cron, and logs.", "admin"],
+      ["filebrowser", "File Browser", "Browse LeadRescuePro and Hermes files.", "admin"],
+      ["terminal", "Terminal", "Run safe non-interactive commands.", "admin"]
     ];
-    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [], callers: [] };
+    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [], callers: [], hermesChat: [], currentFilePath: "." };
 
     const $ = (id) => document.getElementById(id);
     const money = (n) => "$" + Number(n || 0).toLocaleString();
@@ -824,7 +1017,7 @@
     }
 
     function refreshTab(id) {
-      const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue, social: loadSocial };
+      const map = { overview: loadOverview, calllog: loadTodayCalls, prospects: loadProspects, callers: loadCallers, weekly: loadWeekly, commissions: loadCommissions, clients: loadClients, revenue: loadRevenue, social: loadSocial, hermeschat: renderHermesChat, systemusage: loadSystemUsage, filebrowser: loadFileBrowser, terminal: () => Promise.resolve() };
       if (map[id]) map[id]().catch(err => { $("apiStatus").textContent = err.message; notify(err.message); });
     }
 
@@ -847,18 +1040,28 @@
 
     async function loadHermesStatus() {
       if (state.user?.role !== "admin") return;
-      const h = await api("/hermes/status").catch(() => null);
+      const [h, skills, sessions, cron, providers] = await Promise.all([
+        api("/hermes/status").catch(() => null),
+        api("/hermes/skills").catch(() => null),
+        api("/hermes/sessions").catch(() => null),
+        api("/hermes/cron-jobs").catch(() => null),
+        api("/hermes/providers").catch(() => null),
+      ]);
       if (!h) return;
       $("hermesStatusPill").textContent = h.status || "unknown";
+      const lastReport = (h.last_reports || []).slice(-1)[0];
       const lastReports = (h.last_reports || []).map(r => r.name || r.timestamp).join(", ") || "No local report files yet";
+      const activeModel = providers?.model?.default || providers?.model?.name || "gpt-5.4-mini";
       $("hermesStatusList").innerHTML = `
-        <li><div class="strong">Daily report</div><div class="muted">${esc(h.daily_report_schedule)} - ${esc(lastReports)}</div></li>
-        <li><div class="strong">Prospect search</div><div class="muted">${esc(h.daily_prospect_search?.status)} - ${h.daily_prospect_search?.hermes_reddit_count || 0} Hermes Reddit prospects</div></li>
-        <li><div class="strong">Social posting</div><div class="muted">${esc(h.social_content_posting?.status)} - ${esc(h.social_content_posting?.instagram)}</div></li>
+        <li><div class="strong">Last report</div><div class="muted">${esc(lastReport?.timestamp || "No report file yet")} - ${esc(h.daily_report_schedule)}</div></li>
+        <li><div class="strong">Cron health</div><div class="muted">${cron?.active || h.cron_jobs_found || 0} active / ${cron?.paused || 0} paused jobs tracked</div></li>
+        <li><div class="strong">Prospects found</div><div class="muted">${h.daily_prospect_search?.hermes_reddit_count || 0} Hermes Reddit prospects / ${h.daily_prospect_search?.scraped_count || 0} scraped leads</div></li>
+        <li><div class="strong">Hermes usage</div><div class="muted">${skills?.count || 0} skills / ${sessions?.count || 0} recent sessions / ${esc(providers?.active_provider || "provider pending")} ${esc(activeModel)}</div></li>
+        <li><div class="strong">Recent reports</div><div class="muted">${esc(lastReports)}</div></li>
       `;
       $("systemHealthList").innerHTML = `
         <li><div class="strong">Backend / tunnel</div><div class="muted">${esc(h.tunnel?.configured_url)} with bypass header enabled</div></li>
-        <li><div class="strong">Cron jobs</div><div class="muted">${h.cron_jobs_found || 0} scheduled jobs tracked</div></li>
+        <li><div class="strong">Cron jobs</div><div class="muted">${cron?.count ?? h.cron_jobs_found ?? 0} job files discovered; ${h.cron_jobs_found || 0} crontab entries expected</div></li>
         <li><div class="strong">MCP connections</div><div class="muted">${(h.mcp_connections || []).map(c => `${c.name}: ${c.status}`).join(" | ")}</div></li>
       `;
     }
@@ -1015,9 +1218,133 @@
       `;
     }
 
+    function formatBytes(bytes) {
+      const value = Number(bytes || 0);
+      if (value < 1024) return `${value} B`;
+      if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+      return `${(value / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function renderHermesChat() {
+      if (state.user?.role !== "admin") return Promise.resolve();
+      const messages = state.hermesChat.length ? state.hermesChat : [{ role: "assistant", text: "Hermes chat is ready. Ask about SDR ops, prospects, social, files, or platform health." }];
+      $("hermesChatWindow").innerHTML = messages.map(m => `<div class="chat-line ${m.role === "user" ? "user" : "assistant"}"><div class="bubble">${esc(m.text)}</div></div>`).join("");
+      $("hermesChatWindow").scrollTop = $("hermesChatWindow").scrollHeight;
+      return Promise.resolve();
+    }
+
+    async function loadSystemUsage() {
+      if (state.user?.role !== "admin") return;
+      const [usage, providers, skills, cron, logs, sessions] = await Promise.all([
+        api("/hermes/usage"),
+        api("/hermes/providers"),
+        api("/hermes/skills"),
+        api("/hermes/cron-jobs"),
+        api("/hermes/logs"),
+        api("/hermes/sessions"),
+      ]);
+      $("systemUsageStats").innerHTML = `
+        <div class="mini-stat"><span class="kpi-label">Total tokens</span><b>${Number(usage.total_tokens || 0).toLocaleString()}</b></div>
+        <div class="mini-stat"><span class="kpi-label">Input / output</span><b>${Number(usage.input_tokens || 0).toLocaleString()} / ${Number(usage.output_tokens || 0).toLocaleString()}</b></div>
+        <div class="mini-stat"><span class="kpi-label">Sessions</span><b>${sessions.count || 0}</b></div>
+        <div class="mini-stat"><span class="kpi-label">Cost tracked</span><b>${money(usage.cost_total)}</b></div>
+      `;
+      $("providerCount").textContent = providers.count || 0;
+      $("providerList").innerHTML = (providers.providers || []).map(p => `<li><div class="strong">${esc(p.name)} <span class="pill ${p.logged_in ? "green" : "amber"}">${p.logged_in ? "logged in" : "configured"}</span></div><div class="muted">${esc(p.auth_mode || p.source || "")} ${esc(p.last_refresh || "")}</div></li>`).join("") || `<li class="muted">No providers configured.</li>`;
+      $("skillCount").textContent = skills.count || 0;
+      $("skillList").innerHTML = (skills.skills || []).slice(0, 8).map(s => `<li><div class="strong">${esc(s.title || s.name)}</div><div class="muted">${esc(s.description || s.path)}</div></li>`).join("") || `<li class="muted">No skills found.</li>`;
+      $("cronCount").textContent = `${cron.active || 0}/${cron.count || 0}`;
+      $("cronList").innerHTML = (cron.jobs || []).slice(0, 8).map(j => `<li><div class="strong">${esc(j.name)} <span class="pill">${esc(j.status)}</span></div><div class="muted">${esc(j.modified_at || j.path)}</div></li>`).join("") || `<li class="muted">No Hermes cron state files found.</li>`;
+      $("hermesLogOutput").textContent = (logs.lines || []).join("\n") || "No Hermes log lines found.";
+    }
+
+    async function loadFileBrowser(path = state.currentFilePath || ".") {
+      if (state.user?.role !== "admin") return;
+      state.currentFilePath = path;
+      $("fileBrowserPath").value = path;
+      $("fileBrowserMessage").textContent = "Loading...";
+      const data = await api(`/hermes/files?path=${encodeURIComponent(path)}`);
+      $("fileBrowserMessage").textContent = "";
+      $("fileBrowserTitle").textContent = data.path || path;
+      $("fileBrowserMeta").textContent = data.is_dir ? `${(data.entries || []).length} entries` : formatBytes(data.size);
+      if (data.is_dir) {
+        const parentButton = data.parent && data.parent !== data.path ? `<button class="file-entry" type="button" onclick="openHermesPath('${encodeURIComponent(data.parent)}')"><span>..</span><small>Parent</small></button>` : "";
+        const entries = (data.entries || []).map(entry => `<button class="file-entry" type="button" onclick="openHermesPath('${encodeURIComponent(entry.path)}')"><span>${entry.is_dir ? "Folder" : "File"} ${esc(entry.name)}</span><small>${entry.is_dir ? "Directory" : formatBytes(entry.size)}</small></button>`).join("");
+        $("fileBrowserEntries").innerHTML = parentButton + entries || `<div class="muted">No files found.</div>`;
+      } else {
+        $("fileBrowserEntries").innerHTML = `<button class="file-entry" type="button" onclick="openHermesPath('${encodeURIComponent(data.parent)}')"><span>Back to parent</span><small>${esc(data.parent || "")}</small></button>`;
+        $("fileContent").textContent = data.content || "";
+        $("fileContentMeta").textContent = `${formatBytes(data.size)}${data.truncated ? " / truncated" : ""}`;
+      }
+    }
+
+    function openHermesPath(encodedPath) {
+      loadFileBrowser(decodeURIComponent(encodedPath)).catch(err => {
+        $("fileBrowserMessage").textContent = err.message;
+        notify(err.message);
+      });
+    }
+
+    window.openHermesPath = openHermesPath;
+
     function formData(form) {
       return Object.fromEntries(new FormData(form).entries());
     }
+
+    $("hermesChatForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const message = $("hermesMessage").value.trim();
+      if (!message) return;
+      state.hermesChat.push({ role: "user", text: message });
+      state.hermesChat.push({ role: "assistant", text: "Thinking..." });
+      $("hermesChatStatus").textContent = "Hermes is thinking";
+      $("hermesChatMessage").textContent = "";
+      renderHermesChat();
+      try {
+        const data = await api("/hermes/chat", { method: "POST", body: JSON.stringify({ message }) });
+        state.hermesChat[state.hermesChat.length - 1] = { role: "assistant", text: data.response || "Hermes returned no text." };
+        $("hermesChatStatus").textContent = `${data.provider || "Hermes"} ${data.model || ""}`.trim();
+        $("hermesChatMessage").textContent = data.ok ? "Response received." : "Hermes returned an error.";
+        $("hermesMessage").value = "";
+      } catch (err) {
+        state.hermesChat[state.hermesChat.length - 1] = { role: "assistant", text: err.message };
+        $("hermesChatStatus").textContent = "Hermes error";
+        $("hermesChatMessage").textContent = err.message;
+        notify(err.message);
+      }
+      state.hermesChat = state.hermesChat.slice(-20);
+      renderHermesChat();
+    });
+
+    $("fileBrowserGo").addEventListener("click", () => {
+      loadFileBrowser($("fileBrowserPath").value || ".").catch(err => {
+        $("fileBrowserMessage").textContent = err.message;
+        notify(err.message);
+      });
+    });
+
+    $("fileBrowserPath").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        $("fileBrowserGo").click();
+      }
+    });
+
+    $("terminalForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("terminalMessage").textContent = "Running command...";
+      $("terminalMeta").textContent = "Working...";
+      try {
+        const data = await api("/hermes/terminal", { method: "POST", body: JSON.stringify(formData(e.currentTarget)) });
+        $("terminalMessage").textContent = data.timed_out ? "Command timed out." : `Exit code ${data.returncode}`;
+        $("terminalMeta").textContent = data.cwd || "cwd";
+        $("terminalOutput").textContent = [data.stdout, data.stderr].filter(Boolean).join("\n") || "Command produced no output.";
+      } catch (err) {
+        $("terminalMessage").textContent = err.message;
+        $("terminalOutput").textContent = err.message;
+        notify(err.message);
+      }
+    });
 
     $("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
