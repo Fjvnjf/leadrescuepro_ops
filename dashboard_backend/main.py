@@ -266,8 +266,8 @@ def seed_csv_prospects(db: Session):
 # ── Startup ──────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
-    migrate_db()
     init_db()
+    migrate_db()
     db = next(get_db())
     try:
         seed_csv_prospects(db)
