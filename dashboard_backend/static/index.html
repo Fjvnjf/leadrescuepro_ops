@@ -10,7 +10,7 @@
   <script>
     window.LRP_DASHBOARD_CONFIG = {
       // Update this whenever the public API tunnel changes.
-      DASHBOARD_TUNNEL_URL: "https://long-tagged-fixtures-forge.trycloudflare.com"
+      DASHBOARD_TUNNEL_URL: "https://shareholders-feature-visual-jokes.trycloudflare.com"
     };
   </script>
   <style>
@@ -908,7 +908,13 @@
     const DASHBOARD_TUNNEL_URL = DASHBOARD_CONFIG.DASHBOARD_TUNNEL_URL || "";
     const TOKEN_KEY = "lrp_dashboard_token";
     const USER_KEY = "lrp_dashboard_user";
-    const API_BASE = location.hostname.includes("github.io") && DASHBOARD_TUNNEL_URL ? `${DASHBOARD_TUNNEL_URL}/api` : "/api";
+    const SAME_ORIGIN_API =
+      location.port === "8650" ||
+      location.hostname === "lrp-dash.loca.lt" ||
+      location.hostname.endsWith(".loca.lt") ||
+      location.hostname.endsWith(".trycloudflare.com");
+    const LOCAL_SITE_API = ["localhost", "127.0.0.1", "::1"].includes(location.hostname) ? "http://127.0.0.1:8650/api" : "";
+    const API_BASE = SAME_ORIGIN_API ? "/api" : (LOCAL_SITE_API || `${DASHBOARD_TUNNEL_URL}/api`);
     const tabs = [
       ["overview", "Overview", "Live SDR activity, prospects, revenue, and execution queue.", "all"],
       ["calllog", "Call Log", "Log calls fast and keep the day clean.", "all"],
@@ -1340,6 +1346,7 @@
     $("fileBrowserGo").addEventListener("click", () => {
       loadFileBrowser($("fileBrowserPath").value || "").catch(err => {
         $("fileBrowserMessage").textContent = err.message;
+        $("fileBrowserPath").value = state.currentFilePath || state.fileRoots.project || "";
         notify(err.message);
       });
     });
@@ -1459,7 +1466,7 @@
       const form = e.currentTarget;
       $("scraperMessage").textContent = "Scraper running...";
       try {
-        const result = await api("/scraper/run", { method: "POST", body: JSON.stringify(formData(form)) });
+        const result = await api("/leads/scrape", { method: "POST", body: JSON.stringify(formData(form)) });
         $("scraperMessage").textContent = `Imported ${result.imported} leads for ${result.city}, ${result.state}.`;
         loadProspects();
       } catch (err) {

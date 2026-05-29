@@ -60,8 +60,12 @@ app.add_middleware(
     allow_origins=[
         "https://fjvnjf.github.io",
         "https://fjvnjf.github.io/lrp-dashboard-frontend",
+        "https://leadrescuepro.com",
+        "https://www.leadrescuepro.com",
         "http://localhost:8650",
         "http://127.0.0.1:8650",
+        "http://localhost:8123",
+        "http://127.0.0.1:8123",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -349,7 +353,7 @@ def validate_terminal_command(command: str):
     if not command:
         raise HTTPException(status_code=400, detail="command required")
     banned_tokens = {"sudo", "su", "ssh", "scp", "sftp", "vim", "vi", "nano", "less", "more", "top", "htop", "python", "python3", "node", "npm", "npx", "bash", "zsh", "sh"}
-    shell_tokens = {">", "<", "&&", "||", ";", "`", "$("}
+    shell_tokens = {"|", ">", "<", "&", "&&", "||", ";", "`", "$("}
     if any(token in command for token in shell_tokens):
         raise HTTPException(
             status_code=400,
