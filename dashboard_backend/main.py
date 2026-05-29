@@ -9,6 +9,8 @@ import logging
 import csv
 import io
 import re
+import shlex
+import sqlite3
 import subprocess
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
@@ -31,6 +33,15 @@ STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
 PROJECT_DIR = BASE_DIR.parent
 REPORT_DIR = PROJECT_DIR / "daily-reports"
+HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))).expanduser()
+HERMES_STATE_DB = HERMES_HOME / "state.db"
+HERMES_SKILLS_DIR = HERMES_HOME / "skills"
+HERMES_LOG_PATH = HERMES_HOME / "logs" / "agent.log"
+HERMES_CRON_STATE_DIR = HERMES_HOME / "cron" / "state"
+HERMES_CONFIG_PATH = HERMES_HOME / "config.yaml"
+HERMES_AUTH_PATH = HERMES_HOME / "auth.json"
+HERMES_DEFAULT_CHAT_PROVIDER = os.environ.get("HERMES_DASHBOARD_PROVIDER", "openai-codex")
+HERMES_DEFAULT_CHAT_MODEL = os.environ.get("HERMES_DASHBOARD_MODEL", "gpt-5.4-mini")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -163,6 +174,107 @@ def tail_matching_timestamps(path: Path, limit: int = 3):
     except OSError:
         return []
     return matches[-limit:]
+
+def tail_lines(path: Path, limit: int = 30):
+    if not path.exists():
+        return []
+    try:
+        return path.read_text(errors="ignore").splitlines()[-limit:]
+    except OSError:
+        return []
+
+def read_json_file(path: Path):
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(errors="ignore"))
+    except Exception:
+        return None
+
+def read_yaml_or_text(path: Path):
+    if not path.exists():
+        return {}
+    try:
+        import yaml
+        parsed = yaml.safe_load(path.read_text(errors="ignore"))
+        return parsed or {}
+    except Exception:
+        return {"raw": path.read_text(errors="ignore")}
+
+def redact_secret(value):
+    if value is None:
+        return None
+    text_value = str(value)
+    if len(text_value) <= 8:
+        return "***"
+    return f"{text_value[:4]}...{text_value[-4:]}"
+
+def hermes_db_connection():
+    if not HERMES_STATE_DB.exists():
+        return None
+    return sqlite3.connect(f"file:{HERMES_STATE_DB}?mode=ro", uri=True)
+
+def hermes_tables(conn):
+    rows = conn.execute("select name from sqlite_master where type='table'").fetchall()
+    return {row[0] for row in rows}
+
+def hermes_table_columns(conn, table_name):
+    return {row[1] for row in conn.execute(f"pragma table_info({table_name})").fetchall()}
+
+def parse_skill_file(path: Path):
+    text_body = path.read_text(errors="ignore")
+    lines = [line.strip() for line in text_body.splitlines()]
+    title = path.parent.name
+    description = ""
+    for line in lines:
+        if line.startswith("#"):
+            title = line.lstrip("#").strip() or title
+            break
+    for line in lines:
+        if line and not line.startswith("#") and not line.startswith("---"):
+            description = line[:240]
+            break
+    return {
+        "name": path.parent.name,
+        "title": title,
+        "description": description,
+        "path": str(path),
+        "updated_at": file_mtime_iso(path),
+    }
+
+def resolve_browser_path(raw_path: str | None):
+    base = PROJECT_DIR.resolve()
+    if not raw_path or raw_path in {"~", ".", str(PROJECT_DIR)}:
+        return base
+    expanded = Path(os.path.expanduser(raw_path))
+    if not expanded.is_absolute():
+        expanded = base / expanded
+    resolved = expanded.resolve()
+    allowed_roots = [base, HERMES_HOME.resolve()]
+    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+        raise HTTPException(status_code=403, detail="Path is outside allowed dashboard roots")
+    return resolved
+
+def safe_terminal_cwd(raw_cwd: str | None):
+    cwd = resolve_browser_path(raw_cwd) if raw_cwd else PROJECT_DIR.resolve()
+    if not cwd.exists() or not cwd.is_dir():
+        raise HTTPException(status_code=400, detail="cwd must be an existing directory")
+    return cwd
+
+def validate_terminal_command(command: str):
+    command = (command or "").strip()
+    if not command:
+        raise HTTPException(status_code=400, detail="command required")
+    banned_tokens = {"sudo", "su", "ssh", "scp", "sftp", "vim", "vi", "nano", "less", "more", "top", "htop", "python", "python3", "node", "npm", "npx", "bash", "zsh", "sh"}
+    shell_tokens = {"|", ">", "<", "&&", "||", ";", "`", "$("}
+    if any(token in command for token in shell_tokens):
+        raise HTTPException(status_code=400, detail="Shell operators are not allowed")
+    parts = shlex.split(command)
+    if not parts:
+        raise HTTPException(status_code=400, detail="command required")
+    if parts[0] in banned_tokens:
+        raise HTTPException(status_code=400, detail=f"Command not allowed: {parts[0]}")
+    return parts
 
 def parse_reddit_research(limit: int = 16):
     prospects = []
@@ -1231,6 +1343,307 @@ def hermes_status(db: Session = Depends(get_db), user: User = Depends(require_ad
         },
         "safe_scope_updated_at": file_mtime_iso(PROJECT_DIR / "00_safe_autonomous_scope.md"),
     }
+
+@app.get("/api/hermes/sessions")
+@app.get("/api/hermes/chat-sessions")
+def hermes_sessions(limit: int = Query(20), user: User = Depends(require_admin)):
+    limit = max(1, min(limit, 100))
+    conn = hermes_db_connection()
+    if not conn:
+        return {"sessions": [], "source": str(HERMES_STATE_DB), "exists": False}
+    try:
+        conn.row_factory = sqlite3.Row
+        tables = hermes_tables(conn)
+        if "sessions" in tables:
+            columns = hermes_table_columns(conn, "sessions")
+            order_col = "updated_at" if "updated_at" in columns else "created_at" if "created_at" in columns else "id"
+            rows = conn.execute(f"select * from sessions order by {order_col} desc limit ?", (limit,)).fetchall()
+            sessions = [dict(row) for row in rows]
+        elif "messages" in tables:
+            rows = conn.execute(
+                """
+                select session_id,
+                       count(*) as message_count,
+                       coalesce(sum(token_count), 0) as token_count,
+                       min(timestamp) as started_at,
+                       max(timestamp) as updated_at
+                  from messages
+                 group by session_id
+                 order by updated_at desc
+                 limit ?
+                """,
+                (limit,),
+            ).fetchall()
+            sessions = [dict(row) for row in rows]
+        else:
+            sessions = []
+        return {"sessions": sessions, "count": len(sessions), "source": str(HERMES_STATE_DB), "exists": True}
+    finally:
+        conn.close()
+
+@app.get("/api/hermes/usage")
+def hermes_usage(user: User = Depends(require_admin)):
+    conn = hermes_db_connection()
+    if not conn:
+        return {"exists": False, "total_tokens": 0, "input_tokens": 0, "output_tokens": 0, "cost_total": 0, "by_model": [], "daily": []}
+    try:
+        conn.row_factory = sqlite3.Row
+        tables = hermes_tables(conn)
+        now_ts = datetime.utcnow().timestamp()
+        since_ts = (datetime.utcnow() - timedelta(days=30)).timestamp()
+        usage = {
+            "exists": True,
+            "source": str(HERMES_STATE_DB),
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_total": 0,
+            "by_model": [],
+            "daily": [],
+        }
+        if "messages" in tables:
+            row = conn.execute("select coalesce(sum(token_count), 0) as total from messages").fetchone()
+            usage["total_tokens"] = int(row["total"] or 0)
+            role_rows = conn.execute("select role, coalesce(sum(token_count), 0) as tokens from messages group by role").fetchall()
+            for role_row in role_rows:
+                role = role_row["role"]
+                tokens = int(role_row["tokens"] or 0)
+                if role == "user":
+                    usage["input_tokens"] += tokens
+                else:
+                    usage["output_tokens"] += tokens
+            daily_rows = conn.execute(
+                """
+                select date(timestamp, 'unixepoch') as day, coalesce(sum(token_count), 0) as tokens
+                  from messages
+                 where timestamp >= ?
+                 group by day
+                 order by day
+                """,
+                (since_ts,),
+            ).fetchall()
+            usage["daily"] = [dict(row) for row in daily_rows]
+            usage["by_model"] = [{"model": "unknown", "tokens": usage["total_tokens"], "cost": 0}]
+        if "sessions" in tables:
+            columns = hermes_table_columns(conn, "sessions")
+            model_col = "model" if "model" in columns else "model_name" if "model_name" in columns else None
+            cost_col = "cost" if "cost" in columns else "total_cost" if "total_cost" in columns else None
+            token_col = "total_tokens" if "total_tokens" in columns else "token_count" if "token_count" in columns else None
+            if model_col and (cost_col or token_col):
+                select_cost = f"coalesce(sum({cost_col}), 0)" if cost_col else "0"
+                select_tokens = f"coalesce(sum({token_col}), 0)" if token_col else "0"
+                rows = conn.execute(
+                    f"select {model_col} as model, {select_tokens} as tokens, {select_cost} as cost from sessions group by {model_col} order by tokens desc"
+                ).fetchall()
+                usage["by_model"] = [dict(row) for row in rows]
+                usage["cost_total"] = round(sum(float(row["cost"] or 0) for row in rows), 4)
+        usage["window"] = {"days": 30, "since": datetime.utcfromtimestamp(since_ts).isoformat(), "now": datetime.utcfromtimestamp(now_ts).isoformat()}
+        return usage
+    finally:
+        conn.close()
+
+@app.get("/api/hermes/skills")
+def hermes_skills(user: User = Depends(require_admin)):
+    skills = []
+    if HERMES_SKILLS_DIR.exists():
+        for path in sorted(HERMES_SKILLS_DIR.rglob("SKILL.md")):
+            try:
+                skills.append(parse_skill_file(path))
+            except OSError:
+                continue
+    return {"skills": skills, "count": len(skills), "source": str(HERMES_SKILLS_DIR), "exists": HERMES_SKILLS_DIR.exists()}
+
+@app.get("/api/hermes/files")
+def hermes_files(path: str = Query(None), user: User = Depends(require_admin)):
+    resolved = resolve_browser_path(path)
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    if resolved.is_dir():
+        entries = []
+        for child in sorted(resolved.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            if child.name.startswith(".git"):
+                continue
+            try:
+                stat = child.stat()
+            except OSError:
+                continue
+            entries.append({
+                "name": child.name,
+                "path": str(child),
+                "is_dir": child.is_dir(),
+                "size": stat.st_size,
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            })
+        return {"path": str(resolved), "parent": str(resolved.parent), "is_dir": True, "entries": entries}
+    text_content = resolved.read_text(errors="ignore")
+    max_chars = 200_000
+    return {
+        "path": str(resolved),
+        "parent": str(resolved.parent),
+        "is_dir": False,
+        "size": resolved.stat().st_size,
+        "modified_at": file_mtime_iso(resolved),
+        "content": text_content[:max_chars],
+        "truncated": len(text_content) > max_chars,
+    }
+
+@app.get("/api/hermes/logs")
+def hermes_logs(lines: int = Query(30), user: User = Depends(require_admin)):
+    lines = max(1, min(lines, 200))
+    return {"path": str(HERMES_LOG_PATH), "exists": HERMES_LOG_PATH.exists(), "lines": tail_lines(HERMES_LOG_PATH, lines)}
+
+@app.get("/api/hermes/providers")
+def hermes_providers(user: User = Depends(require_admin)):
+    data = read_json_file(HERMES_AUTH_PATH)
+    config = read_yaml_or_text(HERMES_CONFIG_PATH)
+    providers = []
+    if isinstance(data, dict):
+        auth_providers = data.get("providers") if isinstance(data.get("providers"), dict) else {}
+        for name, value in auth_providers.items():
+            if isinstance(value, dict):
+                providers.append({
+                    "name": name,
+                    "configured": True,
+                    "logged_in": bool(value.get("tokens") or value.get("api_key") or value.get("access_token")),
+                    "last_refresh": value.get("last_refresh"),
+                    "auth_mode": value.get("auth_mode"),
+                    "keys": sorted(value.keys()),
+                })
+        pool = data.get("credential_pool") if isinstance(data.get("credential_pool"), dict) else {}
+        for name, entries in pool.items():
+            providers.append({
+                "name": name,
+                "configured": bool(entries),
+                "logged_in": bool(entries),
+                "credential_count": len(entries) if isinstance(entries, list) else 1,
+                "source": "credential_pool",
+            })
+    model_config = config.get("model") if isinstance(config, dict) else {}
+    return {
+        "path": str(HERMES_AUTH_PATH),
+        "exists": HERMES_AUTH_PATH.exists(),
+        "active_provider": data.get("active_provider") if isinstance(data, dict) else "",
+        "model": model_config if isinstance(model_config, dict) else {},
+        "providers": providers,
+        "count": len(providers),
+    }
+
+@app.get("/api/hermes/cron-jobs")
+def hermes_cron_jobs(user: User = Depends(require_admin)):
+    roots = [HERMES_CRON_STATE_DIR, HERMES_HOME / "cron"]
+    jobs = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.name.startswith(".") or path.suffix.lower() not in {".json", ".yaml", ".yml"}:
+                continue
+            payload = read_json_file(path) if path.suffix.lower() == ".json" else read_yaml_or_text(path)
+            status = "unknown"
+            name = path.stem
+            if isinstance(payload, dict):
+                name = str(payload.get("name") or payload.get("id") or name)
+                status = str(payload.get("status") or payload.get("state") or ("paused" if payload.get("paused") else "active"))
+            jobs.append({"name": name, "status": status, "path": str(path), "modified_at": file_mtime_iso(path), "data": payload if isinstance(payload, dict) else {}})
+    active = len([job for job in jobs if job["status"].lower() in {"active", "enabled", "running"}])
+    paused = len([job for job in jobs if job["status"].lower() in {"paused", "disabled"}])
+    return {"jobs": jobs, "count": len(jobs), "active": active, "paused": paused, "source": str(HERMES_CRON_STATE_DIR)}
+
+@app.get("/api/hermes/platforms")
+def hermes_platforms(user: User = Depends(require_admin)):
+    config = read_yaml_or_text(HERMES_CONFIG_PATH)
+    channel_dir = read_json_file(HERMES_HOME / "channel_directory.json")
+    platforms = []
+    if isinstance(config, dict):
+        for key in ["platforms", "channels", "integrations"]:
+            section = config.get(key)
+            if isinstance(section, dict):
+                platforms.extend({"name": name, "configured": bool(value), "source": key} for name, value in section.items())
+            elif isinstance(section, list):
+                platforms.extend({"name": str(item), "configured": True, "source": key} for item in section)
+    if isinstance(channel_dir, dict):
+        for name, value in channel_dir.items():
+            platforms.append({"name": name, "configured": bool(value), "source": "channel_directory"})
+    return {"config_path": str(HERMES_CONFIG_PATH), "config_exists": HERMES_CONFIG_PATH.exists(), "platforms": platforms, "count": len(platforms)}
+
+@app.post("/api/hermes/terminal")
+def hermes_terminal(data: dict, user: User = Depends(require_admin)):
+    command = data.get("command", "")
+    cwd = safe_terminal_cwd(data.get("cwd"))
+    parts = validate_terminal_command(command)
+    try:
+        completed = subprocess.run(
+            parts,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return {
+            "command": command,
+            "cwd": str(cwd),
+            "returncode": completed.returncode,
+            "stdout": completed.stdout[-20000:],
+            "stderr": completed.stderr[-20000:],
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "command": command,
+            "cwd": str(cwd),
+            "returncode": None,
+            "stdout": (exc.stdout or "")[-20000:] if isinstance(exc.stdout, str) else "",
+            "stderr": (exc.stderr or "")[-20000:] if isinstance(exc.stderr, str) else "Command timed out after 30 seconds",
+            "timed_out": True,
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Command not found: {parts[0]}")
+
+@app.post("/api/hermes/chat")
+def hermes_chat(data: dict, user: User = Depends(require_admin)):
+    message = (data.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message required")
+    hermes_bin = os.environ.get("HERMES_BIN", str(Path.home() / ".local" / "bin" / "hermes"))
+    provider = (data.get("provider") or HERMES_DEFAULT_CHAT_PROVIDER).strip()
+    model = (data.get("model") or HERMES_DEFAULT_CHAT_MODEL).strip()
+    history_path = DATA_DIR / "hermes_chat_history.json"
+    command = [hermes_bin]
+    if provider:
+        command.extend(["--provider", provider])
+    if model:
+        command.extend(["--model", model])
+    command.extend(["--oneshot", message])
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=int(os.environ.get("HERMES_CHAT_TIMEOUT", "60")),
+        )
+        response = completed.stdout.strip() or completed.stderr.strip() or "Hermes returned no text."
+        ok = completed.returncode == 0
+    except subprocess.TimeoutExpired:
+        response = "Hermes chat timed out before returning a response."
+        ok = False
+    except FileNotFoundError:
+        response = f"Hermes binary not found at {hermes_bin}."
+        ok = False
+    exchange = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": message,
+        "response": response,
+        "ok": ok,
+        "provider": provider,
+        "model": model,
+    }
+    history = read_json_file(history_path) or []
+    if not isinstance(history, list):
+        history = []
+    history.append(exchange)
+    history_path.write_text(json.dumps(history[-50:], indent=2), encoding="utf-8")
+    return {"response": response, "ok": ok, "provider": provider, "model": model, "history": history[-10:]}
 
 @app.get("/api/social/activity")
 def social_activity(user: User = Depends(require_admin)):
