@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LRP Caller Dashboard</title>
+<style>
+:root{--bg:#02040a;--panel:#07101b;--line:#173653;--text:#e8f7ff;--muted:#7d9bb7;--cyan:#31d7ff;--green:#2dff9a;--amber:#ffd166;--red:#ff416d;--purple:#9f7aea;--panel2:#0b1625;--shadow:0 0 42px rgba(49,215,255,.12),inset 0 0 38px rgba(28,105,212,.04)}
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--bg)}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -12%,rgba(28,105,212,.42),transparent 34rem),radial-gradient(circle at 88% 18%,rgba(49,215,255,.16),transparent 24rem),linear-gradient(180deg,#02040a,#050a12 58%,#02040a);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(rgba(49,215,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(49,215,255,.03) 1px,transparent 1px);background-size:42px 42px;mask-image:radial-gradient(circle at center,black,transparent 78%)}
+button,input,select,textarea{font:inherit}
+.wrap{position:relative;max-width:1240px;margin:0 auto;padding:18px}
+.login-shell{min-height:100vh;display:grid;place-items:center;padding:18px}
+.login-card{width:min(100%,390px);border:1px solid var(--line);background:linear-gradient(180deg,rgba(11,22,37,.9),rgba(4,8,15,.94));box-shadow:var(--shadow);padding:24px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--cyan);font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;margin-bottom:10px}
+.brand-dot{width:10px;height:10px;border:1px solid var(--cyan);box-shadow:0 0 16px rgba(49,215,255,.75);background:rgba(49,215,255,.22)}
+h1{font-size:25px;line-height:1;margin:0 0 8px;font-weight:700;letter-spacing:-.03em}
+h2{margin:0 0 12px;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#bfefff}
+.muted{color:var(--muted)}
+.fine{font-size:11px;color:var(--muted)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:10px;text-transform:uppercase;letter-spacing:.13em;color:var(--muted);font-weight:900}
+input,select,textarea{width:100%;min-height:44px;border:1px solid var(--line);border-radius:0;background:#06101b;color:var(--text);padding:10px 11px;outline:none}
+textarea{min-height:104px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:rgba(49,215,255,.78);box-shadow:0 0 0 2px rgba(49,215,255,.08)}
+.btn{min-height:44px;border:1px solid rgba(49,215,255,.42);border-radius:0;background:rgba(49,215,255,.08);color:var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:900}
+.btn:hover,.btn:focus-visible{background:rgba(49,215,255,.16);border-color:var(--cyan)}
+.btn:disabled{opacity:.55;cursor:wait}
+.btn-red{color:var(--red);border-color:rgba(255,65,109,.45);background:rgba(255,65,109,.06)}
+.btn-red:hover,.btn-red:focus-visible{background:rgba(255,65,109,.13);border-color:var(--red)}
+.btn-full{width:100%;margin-top:14px}
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.hdr-main{display:flex;flex-direction:column;gap:6px}
+.caller-name{font-size:22px;line-height:1;font-weight:700;letter-spacing:-.03em}
+.hdr-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;min-height:28px;border:1px solid rgba(49,215,255,.32);background:rgba(49,215,255,.07);padding:5px 8px;color:var(--cyan);font-size:9px;text-transform:uppercase;letter-spacing:.12em;font-weight:900}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.panel{border:1px solid var(--line);background:linear-gradient(180deg,rgba(11,22,37,.88),rgba(4,8,15,.9));box-shadow:var(--shadow);padding:14px}
+.quick{grid-column:span 7}
+.stats{grid-column:span 5}
+.wide{grid-column:span 12}
+.half{grid-column:span 6}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.span2{grid-column:span 2}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{border:1px solid rgba(23,54,83,.78);background:rgba(6,16,27,.64);padding:12px;min-height:94px;display:flex;flex-direction:column;justify-content:space-between}
+.metric{font-size:34px;line-height:.9;font-weight:300;letter-spacing:-.06em}
+.label{color:var(--muted);font-size:11px;margin-top:6px}
+.message{min-height:19px;margin-top:10px;font-size:12px}
+.err{color:var(--red)}
+.ok-text{color:var(--green)}
+.table-wrap{width:100%;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:720px}
+th{text-align:left;text-transform:uppercase;color:var(--muted);font-size:9px;letter-spacing:.12em;padding:8px 6px;border-bottom:1px solid var(--line);font-weight:900}
+td{padding:9px 6px;border-bottom:1px solid rgba(23,54,83,.3);vertical-align:top}
+.pill{display:inline-flex;align-items:center;min-height:24px;border:1px solid rgba(49,215,255,.28);padding:4px 7px;color:var(--cyan);font-size:9px;text-transform:uppercase;letter-spacing:.1em;font-weight:900;white-space:nowrap}
+.pill.ok{color:var(--green);border-color:rgba(45,255,154,.48);background:rgba(45,255,154,.06)}
+.pill.wait{color:var(--amber);border-color:rgba(255,209,102,.48);background:rgba(255,209,102,.06)}
+.pill.stop{color:var(--red);border-color:rgba(255,65,109,.48);background:rgba(255,65,109,.06)}
+.pill.purple{color:var(--purple);border-color:rgba(159,122,234,.52);background:rgba(159,122,234,.08)}
+.empty{color:var(--muted);text-align:center;padding:18px}
+.feed{display:grid;gap:7px;max-height:380px;overflow:auto}
+.entry{display:grid;grid-template-columns:68px 1fr auto;gap:8px;align-items:center;border-bottom:1px solid rgba(23,54,83,.3);padding:8px 0;font-size:12px}
+.entry-time{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.entry-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast{position:fixed;right:18px;bottom:18px;z-index:5;max-width:min(360px,calc(100vw - 36px));border:1px solid rgba(45,255,154,.55);background:linear-gradient(180deg,rgba(9,40,32,.96),rgba(4,12,12,.96));box-shadow:0 0 34px rgba(45,255,154,.16);color:var(--text);padding:13px 14px;transform:translateY(18px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;font-size:13px}
+.toast.show{opacity:1;transform:translateY(0)}
+.hide{display:none!important}
+@media(max-width:860px){.wrap{padding:12px}.grid{grid-template-columns:1fr}.quick,.stats,.wide,.half{grid-column:auto}.quick{order:1}.stats{order:2}.form-grid{grid-template-columns:1fr}.span2{grid-column:auto}.hdr{align-items:stretch;flex-direction:column}.hdr-actions{display:grid;grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric{font-size:29px}.panel{padding:12px}}
+@media(max-width:520px){.login-card{padding:18px}.wrap{padding:10px}.stats-grid{grid-template-columns:1fr 1fr;gap:8px}.kpi{min-height:82px;padding:10px}.metric{font-size:26px}.caller-name{font-size:19px}.entry{grid-template-columns:58px 1fr}.entry .pill{grid-column:2}.chip{width:max-content}table{font-size:11px;min-width:650px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script>
+const BASE="/api";
+const TOKEN_KEY="lrp_caller_token";
+const USER_KEY="lrp_caller_user";
+const DISPOSITIONS={
+  voicemail:{label:"Voicemail",cls:"wait"},
+  no_answer:{label:"No Answer",cls:""},
+  talked_interested:{label:"Talked-Interested",cls:"ok"},
+  talked_not_interested:{label:"Talked-Not Interested",cls:"purple"},
+  callback_set:{label:"Callback Set",cls:"wait"},
+  dnc:{label:"DNC/Wrong Number",cls:"stop"},
+  wrong_number:{label:"Wrong Number",cls:"stop"}
+};
+let token=localStorage.getItem(TOKEN_KEY)||"";
+let user=safeJson(localStorage.getItem(USER_KEY));
+let refreshTimer=null;
+let latestCalls=[];
+
+function safeJson(value){try{return value?JSON.parse(value):null}catch{return null}}
+function esc(value){return String(value==null?"":value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+function fmtTime(value){if(!value)return "--";const d=new Date(value);return Number.isNaN(d.getTime())?"--":d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}
+function fmtDate(value){return value.toLocaleDateString([], {weekday:"long",month:"short",day:"numeric"})}
+function dispositionMeta(value){return DISPOSITIONS[value]||{label:String(value||"Unknown").replaceAll("_"," "),cls:""}}
+function pill(value){const meta=dispositionMeta(value);return `<span class="pill ${meta.cls}">${esc(meta.label)}</span>`}
+function duration(value){const n=Number(value||0);return n?`${n}s`:"--"}
+function toast(message){const el=document.getElementById("toast");el.textContent=message;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2600)}
+
+async function request(path,options={}){
+  const headers=options.headers?new Headers(options.headers):new Headers();
+  if(token)headers.set("Authorization","Bearer "+token);
+  if(options.body&&!(options.body instanceof FormData)&&!headers.has("Content-Type"))headers.set("Content-Type","application/json");
+  const res=await fetch(BASE+path,{...options,headers});
+  let data=null;
+  try{data=await res.json()}catch{data={}}
+  if(!res.ok){
+    if(res.status===401||res.status===403)logout(false);
+    throw new Error(data.detail||"Request failed");
+  }
+  return data;
+}
+
+function showLogin(message=""){
+  clearInterval(refreshTimer);
+  document.getElementById("app").innerHTML=`
+    <main class="login-shell">
+      <form class="login-card" id="loginForm">
+        <div class="brand"><span class="brand-dot"></span><span>LeadRescuePro</span></div>
+        <h1>Caller access</h1>
+        <p class="fine">Sign in with your SDR username and 4-digit PIN.</p>
+        <div class="field" style="margin-top:18px">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" required>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label for="pin">PIN</label>
+          <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-full" id="loginBtn" type="submit">Enter Dashboard</button>
+        <div class="message err" id="loginMsg">${esc(message)}</div>
+      </form>
+    </main>`;
+  document.getElementById("loginForm").addEventListener("submit",login);
+  document.getElementById("username").focus();
+}
+
+async function login(event){
+  event.preventDefault();
+  const btn=document.getElementById("loginBtn");
+  const msg=document.getElementById("loginMsg");
+  const fd=new FormData(event.currentTarget);
+  btn.disabled=true;
+  msg.textContent="";
+  try{
+    const data=await request("/auth/login",{method:"POST",body:fd});
+    token=data.access_token;
+    user=data.user;
+    localStorage.setItem(TOKEN_KEY,token);
+    localStorage.setItem(USER_KEY,JSON.stringify(user));
+    showDashboard();
+    await loadAll();
+  }catch(err){
+    msg.textContent=err.message||"Invalid username or PIN";
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+function logout(render=true){
+  token="";
+  user=null;
+  latestCalls=[];
+  clearInterval(refreshTimer);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  if(render)showLogin();
+}
+
+function showDashboard(){
+  const name=user&&user.full_name?user.full_name:(user&&user.username?user.username:"Caller");
+  document.getElementById("app").innerHTML=`
+    <div class="wrap">
+      <header class="hdr">
+        <div class="hdr-main">
+          <div class="brand" style="margin:0"><span class="brand-dot"></span><span>LRP Caller</span></div>
+          <div class="caller-name">${esc(name)}</div>
+          <div class="hdr-meta">
+            <span class="chip" id="todayChip">${fmtDate(new Date())}</span>
+            <span class="chip" id="syncChip">Last sync pending</span>
+          </div>
+        </div>
+        <div class="hdr-actions"><button class="btn btn-red" type="button" id="logoutBtn">Logout</button></div>
+      </header>
+
+      <main class="grid">
+        <section class="panel quick" aria-labelledby="quickTitle">
+          <h2 id="quickTitle">Quick Call Log</h2>
+          <form id="callForm">
+            <div class="form-grid">
+              <div class="field span2">
+                <label for="business_name">Business Name</label>
+                <input id="business_name" name="business_name" required autocomplete="organization">
+              </div>
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input id="phone" name="phone" type="tel" autocomplete="tel">
+              </div>
+              <div class="field">
+                <label for="disposition">Disposition</label>
+                <select id="disposition" name="disposition">
+                  <option value="voicemail">Voicemail</option>
+                  <option value="no_answer">No Answer</option>
+                  <option value="talked_interested">Talked-Interested</option>
+                  <option value="talked_not_interested">Talked-Not Interested</option>
+                  <option value="callback_set">Callback Set</option>
+                  <option value="dnc">DNC/Wrong Number</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="duration_seconds">Duration</label>
+                <input id="duration_seconds" name="duration_seconds" type="number" min="0" step="1" inputmode="numeric" placeholder="Seconds">
+              </div>
+              <div class="field span2">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" placeholder="Outcome, next step, gatekeeper, callback time"></textarea>
+              </div>
+            </div>
+            <button class="btn btn-full" id="submitCall" type="submit">Log Call</button>
+            <div class="message" id="formMsg"></div>
+          </form>
+        </section>
+
+        <section class="stats" aria-labelledby="statsTitle">
+          <h2 id="statsTitle">Today's Stats</h2>
+          <div class="stats-grid">
+            <div class="kpi"><div><div class="metric" id="dialsToday" style="color:var(--cyan)">0</div><div class="label">My Dials Today</div></div></div>
+            <div class="kpi"><div><div class="metric" id="connectsToday" style="color:var(--green)">0</div><div class="label">My Connects</div></div></div>
+            <div class="kpi"><div><div class="metric" id="dncToday" style="color:var(--red)">0</div><div class="label">My DNC</div></div></div>
+            <div class="kpi"><div><div class="metric" id="rateToday" style="color:var(--amber)">0%</div><div class="label">My Rate</div></div></div>
+          </div>
+        </section>
+
+        <section class="panel wide" aria-labelledby="logTitle">
+          <h2 id="logTitle">Today's Call Log</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Time</th><th>Business</th><th>Phone</th><th>Disposition</th><th>Duration</th><th>Notes</th></tr></thead>
+              <tbody id="callRows"><tr><td colspan="6" class="empty">Loading calls...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel wide" aria-labelledby="activityTitle">
+          <h2 id="activityTitle">My Recent Activity</h2>
+          <div class="feed" id="activityFeed"><div class="empty">Loading activity...</div></div>
+        </section>
+      </main>
+    </div>`;
+  document.getElementById("logoutBtn").addEventListener("click",()=>logout(true));
+  document.getElementById("callForm").addEventListener("submit",submitCall);
+  refreshTimer=setInterval(loadAll,30000);
+}
+
+async function loadAll(){
+  if(!token||!user)return;
+  try{
+    const [kpis,callsData]=await Promise.all([
+      request(`/kpis/caller/${user.id}`),
+      request("/calls/today")
+    ]);
+    latestCalls=(callsData.calls||[]).slice().sort((a,b)=>new Date(b.call_time)-new Date(a.call_time));
+    renderStats(kpis);
+    renderCalls(latestCalls);
+    renderActivity(latestCalls.slice(0,20));
+    document.getElementById("syncChip").textContent="Last sync "+fmtTime(new Date());
+  }catch(err){
+    const sync=document.getElementById("syncChip");
+    if(sync)sync.textContent="Sync failed";
+  }
+}
+
+function renderStats(kpis){
+  document.getElementById("dialsToday").textContent=kpis.dials_today||0;
+  document.getElementById("connectsToday").textContent=kpis.connects_today||0;
+  document.getElementById("dncToday").textContent=kpis.dnc_today||0;
+  document.getElementById("rateToday").textContent=(kpis.connect_rate||0)+"%";
+}
+
+function renderCalls(calls){
+  const body=document.getElementById("callRows");
+  if(!calls.length){
+    body.innerHTML=`<tr><td colspan="6" class="empty">No calls logged today</td></tr>`;
+    return;
+  }
+  body.innerHTML=calls.map(c=>`
+    <tr>
+      <td>${fmtTime(c.call_time)}</td>
+      <td><strong>${esc(c.business_name||"Unknown")}</strong></td>
+      <td>${esc(c.phone||"--")}</td>
+      <td>${pill(c.disposition)}</td>
+      <td>${duration(c.duration_seconds)}</td>
+      <td>${esc(c.notes||"")}</td>
+    </tr>`).join("");
+}
+
+function renderActivity(calls){
+  const feed=document.getElementById("activityFeed");
+  if(!calls.length){
+    feed.innerHTML=`<div class="empty">No recent calls yet</div>`;
+    return;
+  }
+  feed.innerHTML=calls.map(c=>`
+    <div class="entry">
+      <div class="entry-time">${fmtTime(c.call_time)}</div>
+      <div class="entry-name">${esc(c.business_name||"Unknown")}</div>
+      ${pill(c.disposition)}
+    </div>`).join("");
+}
+
+async function submitCall(event){
+  event.preventDefault();
+  const form=event.currentTarget;
+  const btn=document.getElementById("submitCall");
+  const msg=document.getElementById("formMsg");
+  const fd=new FormData(form);
+  const payload={
+    business_name:String(fd.get("business_name")||"").trim(),
+    phone:String(fd.get("phone")||"").trim(),
+    disposition:fd.get("disposition")||"voicemail",
+    duration_seconds:Number(fd.get("duration_seconds")||0),
+    notes:String(fd.get("notes")||"").trim()
+  };
+  if(!payload.business_name){
+    msg.className="message err";
+    msg.textContent="Business name is required.";
+    return;
+  }
+  btn.disabled=true;
+  msg.className="message";
+  msg.textContent="Logging call...";
+  try{
+    await request("/calls/log",{method:"POST",body:JSON.stringify(payload)});
+    form.reset();
+    document.getElementById("disposition").value="voicemail";
+    msg.className="message ok-text";
+    msg.textContent="Call logged.";
+    toast("Call logged successfully");
+    await loadAll();
+    document.getElementById("business_name").focus();
+  }catch(err){
+    msg.className="message err";
+    msg.textContent=err.message||"Could not log call.";
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+async function boot(){
+  if(!token){
+    showLogin();
+    return;
+  }
+  if(!user){
+    try{
+      user=await request("/auth/me");
+      localStorage.setItem(USER_KEY,JSON.stringify(user));
+    }catch{
+      showLogin("Session expired. Please sign in again.");
+      return;
+    }
+  }
+  showDashboard();
+  loadAll();
+}
+
+boot();
+</script>
+</body>
+</html>
