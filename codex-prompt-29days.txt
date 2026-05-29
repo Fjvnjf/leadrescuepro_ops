@@ -1,8 +1,14 @@
-PURSUE GOAL: Build a complete LeadRescuePro operations dashboard to close 10 plumbing clients in 29 days. The dashboard manages the FULL LIFECYCLE in one place: cold callers → closers → fulfillment. Everything at /api/ endpoints.
+PURSUE GOAL: Build a complete LeadRescuePro operations dashboard to close 10 US plumbing clients in 29 days. The dashboard manages the FULL LIFECYCLE in one place: cold callers → closers → fulfillment → monthly ops. Everything at /api/ endpoints.
 
 I have a working FastAPI backend at ~/leadrescuepro_ops/dashboard_backend/ on port 8650 with SQLite. Admin login: admin / PIN 4791. Tunnel URL is at the top of admin.html (window.LRP_DASHBOARD_CONFIG.DASHBOARD_TUNNEL_URL) — UPDATE IT TO: https://museum-morgan-cooperation-relatively.trycloudflare.com
 
 DO NOT touch main.py, database.py, or auth.py. Only edit static/admin.html and static/caller.html.
+
+BUSINESS MODEL (build this into the dashboard):
+- Product: $997 setup + $499/month per client
+- Payouts per closed deal: $100 cold caller + $100 closer + $100 fulfillment VA = $300 total cost per deal
+- Monthly ops: $20-50/month per client for VA (include this in client model)
+- Net per client: $997 - $300 = $697 setup profit, then $499 - $100 - $50 = ~$349/month recurring profit
 
 EXISTING:
 - static/admin.html: Login + 6 tabs (Overview, Prospects, Callers, Commissions, Weekly, Log Call). Dark cyberpunk theme. Uses req() for API calls.
@@ -26,88 +32,105 @@ BACKEND ENDPOINTS ALREADY WORKING:
 
 BUILD IN EXACT ORDER — DO NOT STOP UNTIL ALL DONE:
 
-=== 1. ADD 4 NEW TABS TO admin.html ===
+=== 1. ADD REVENUE MODEL TO COMMISSIONS TAB ===
+- The Commission model already has caller_id, deal_amount, commission_amount, status (pending/paid), deal_date
+- When a client is signed (POST /api/clients), auto-create 3 commission entries:
+  - 1 for cold caller ($100, linked to caller_id from prospect.assigned_to)
+  - 1 for closer ($100, assign to a "closer" user role — if no closer assigned, leave unassigned)
+  - 1 for fulfillment VA ($100, assign to a "fulfillment" user role — if no VA assigned, leave unassigned)
+- The commissions tab should show all 3 commission types: "Cold Caller: $100, Closer: $100, Fulfillment: $100, Total: $300 cost"
+- Add a "Payout Status" per client showing "$300 paid out" vs "$300 pending"
+
+=== 2. ADD 5 NEW TABS TO admin.html ===
 
 Current tabs: Overview, Prospects, Callers, Commissions, Weekly, Log Call
-Add: "Pipeline", "Clients & Fulfillment", "SDR Hiring", "Call Recordings"
+Add: "Pipeline", "Clients & Fulfillment", "Profit Dashboard", "SDR Hiring", "Call Recordings"
 
 Tab: PIPELINE (visual funnel, 3 stages)
 - Stage 1 LEADS: GET /api/prospects?status=pending — big number + progress bar toward target 1000
-- Stage 2 CALLS: GET /api/kpis/dashboard — show today_dials / connects / interested / callbacks. Each as mini card with number. Target: 200 dials
+- Stage 2 CALLS: GET /api/kpis/dashboard — show today_dials / connects / interested / callbacks. Each as mini card with number. Target: 200 dials/day
 - Stage 3 CLIENTS: GET /api/clients — total active clients. Also show this week's new clients count. Target: 10 total
 - Use horizontal progress bars for each stage toward target
 
 Tab: CLIENTS & FULFILLMENT
 - GET /api/clients returns all signed clients
-- Table: Company, Owner, Phone, Onboarding Stage (colored pill), Status (colored pill), Monthly Rev, Setup Fee, Started
-- Revenue summary cards at top: "Total MRR: $X", "Total Setup Collected: $X", "Active Clients: X", "Avg Revenue/Client: $X"
-- Fulfillment tracking: For each client, show where they are in setup pipeline:
+- Add a "VA Ops Cost" field display: $20-50/month per client (can be edited in client notes)
+- Revenue summary cards at top: "Total MRR: $X", "Total Setup Collected: $X", "Active Clients: X", "Total Payouts: $X" (sum of all commissions), "Net Profit: $X" (setup+MRR minus payouts minus VA ops)
+- Fulfillment tracking: For each client, show where they are in setup pipeline with clickable stage pills:
   Stage 1: New → Stage 2: Call Handling Setup → Stage 3: Voicemail Config → Stage 4: Calendar Sync → Stage 5: Live Testing → Stage 6: Active
-  Each client row shows their current onboarding_stage as clickable pills. Click moves them to next stage (PATCH /api/clients/{id} with {"onboarding_stage": "next_stage"})
-- Add Client button: opens inline form with business_name, owner_name, phone, email, city, state
-- Click company name to edit notes (textarea that patches to /api/clients/{id} with {"notes": "..."})
-- Edit subscription_status dropdown (active/paused/cancelled/trial/churned)
+  Click a stage pill to PATCH /api/clients/{id} with {"onboarding_stage": "next_stage"}
+- Commission breakdown per client row: "Costs: $300 paid / $300 pending" with colored pills
+- Add Client button: opens inline form
+- Click company name to edit notes (textarea)
+- Edit subscription_status dropdown
+
+Tab: PROFIT DASHBOARD
+- This tab shows the overall financial picture of the business
+- Top row: 6 big KPI cards
+  1. Total Revenue: (all setup_fees + month1 MRR for all active clients) = clients * ($997 + $499)
+  2. Total Payouts: GET /api/commissions/summary → grand_total
+  3. VA Ops Cost: active_clients * $35 (average $20-50)
+  4. Net Profit: Revenue - Payouts - VA Ops
+  5. Avg Revenue/Client: $1,496 (997+499)
+  6. Avg Cost/Client: $350 (300 payouts + 50 ops)
+- Bottom section: "Commission Breakdown" table
+  - Row per deal: Client Name, Setup Fee, Monthly MRR, Cold Caller ($100), Closer ($100), Fulfillment ($100), Total Cost, Net Profit
+  - Footer row: Totals
 
 Tab: SDR HIRING
 - GET/POST/PATCH/DELETE /api/sdr-candidates
 - Table: Name, Email, Country, Stage (colored pill), Source, Applied Date
-- Add Candidate form at top: name, email, phone, country dropdown (Bangladesh/Philippines/Kenya/India/South Africa/Jamaica/Other), source dropdown
-- Stage progress buttons per row: [Applied] → [Shortlisted] → [Interviewed] → [Training] → [Active]. Each button sends PATCH with {"stage": "next_stage"}
-- [Reject] button sends PATCH with {"stage": "rejected"} — turns row red
-- Notes column: click to edit notes inline
-- Show total candidates and how many reached each stage
+- Add Candidate form at top: name, email, phone, country dropdown (Bangladesh/Philippines/Kenya/India/Other), source dropdown (facebook/upwork/linkedin/referral/manual/other)
+- Stage progress buttons per row: [Applied] → [Shortlisted] → [Interviewed] → [Training] → [Active]. Each sends PATCH with {"stage": "next_stage"}
+- [Reject] button sends PATCH with {"stage": "rejected"} — row turns red
+- Show total candidates and stage counts at top
 
 Tab: CALL RECORDINGS
 - GET /api/calls endpoint with date filters
-- This tab shows a list of all calls with recording_path (if exists)
-- Table: Time, Business, Caller, Disposition, Duration, Recording (play button if recording exists), Transcribe button
-- Play button: if recording_path exists, show a playable audio player (use HTML5 <audio> tag)
+- Table: Time, Business, Caller, Disposition, Duration, Recording (play button if exists), Transcribe button
+- Play button: HTML5 <audio> tag if recording_path exists
 - Transcribe button: POST /api/calls/{id}/transcribe — shows transcript below row
 - Filter by date (today/week/month/all) and by caller dropdown
-- Export button: GET /api/calls/export?date=today — downloads as CSV
+- Export button: GET /api/calls/export?date=today — downloads CSV
 
-=== 2. FIX PROSPECTS TAB ===
-- Add "Loom" column: button shows "Send Loom" or "Loom Sent ✓" based on prospect.loom_sent
-- Clicking "Send Loom" → PATCH /api/prospects/{id} with {"loom_sent": true}
-- Add "Assigned To" column: GET /api/callers first, map caller_id to caller name
+Tab: CALENDAR (new section on every tab header)
+- Show current date and countdown to Day 29 of the campaign
+- "Day X of 29" with a thin progress bar
+
+=== 3. FIX PROSPECTS TAB ===
+- Add "Loom" column: button toggles between "Send Loom" / "Loom Sent ✓" (PATCH with loom_sent)
+- Add "Assigned To" column: GET /api/callers, map caller_id to name
 - Add filter dropdown for assigned_to
 
-=== 3. ENHANCE caller.html ===
+=== 4. ENHANCE caller.html ===
 - Callback Reminders section: GET /api/prospects?status=callback_set&assigned={caller_id}
-  Display as list: Business Name, Phone, Days Since Last Contact (highlight red if >3 days), "Call Now" button
+  List: Business Name, Phone, Days Since Last Contact (red if >3 days), "Call Now" button
   Sort by last_contact ascending
-- Scripts & SOP modal button in header:
-  Modal opens with full text of these cold call scripts (include verbatim):
-  
+- Scripts & SOP modal button in header with full text of cold call scripts:
   OWNER ANSWERS: "Hi [Name], this is [Caller] from LeadRescuePro. I'll be brief — I help plumbing businesses reduce missed-call leakage. Are you the right person to ask how after-hours and overflow calls are handled?"
-  
-  GATEKEEPER: "Hi, I'm not calling with an emergency. I'm trying to find who manages call handling or dispatch workflow for [Company]. Who would be best to ask about missed calls and after-hours intake?"
-  
-  FOLLOW-UP: "Hi [Name], I'm following up on my note about missed-call intake. The only reason I reached out is that plumbing callers often call the next company if voicemail picks up. Worth a 2-minute compare of your current process?"
-  
-  After each call, these 3 questions:
-  1. "About how often do calls hit voicemail during the week?"
-  2. "Who decides if a call is urgent enough for immediate dispatch?"
-  3. Close: "If you want, I can show you the missed-call intake flow we use — if it's not relevant, no problem."
-  
+  GATEKEEPER: "Hi, I'm not calling with an emergency. I'm trying to find who manages call handling or dispatch workflow. Who would be best to ask about missed calls?"
+  FOLLOW-UP: "Hi [Name], following up on my note about missed-call intake. The only reason I reached out is that plumbing callers often call the next company if voicemail picks up."
+  After each call, use these 3 questions:
+  1. "About how often do calls hit voicemail?"
+  2. "Who decides if a call is urgent?"
+  3. Close: "If you want, I can show you the missed-call intake flow we use."
   OBJECTIONS:
-  - "Just email info" → "The video I recorded pulls up your specific website to point out the gap — it's tailored for you. What email should I send it to?"
-  - "Is this AI?" → "It's conversational voice tech that breathes and pauses like a real person — that's exactly why I want you to hear it yourself in the video."
-  - "We don't miss calls" → "The video focuses on what happens at 8PM or during peak hours when lines are tied up. Just a 3-minute breakdown."
-  - "No time" → "That's why I'm not asking for a meeting — just dropping a link for when you're free. What email?"
+  - "Just email info" → "The video pulls up your specific website — it's tailored for you. What email?"
+  - "Is this AI?" → "Conversational voice tech that breathes and pauses — exactly why I want you to hear it."
+  - "We don't miss calls" → "The video focuses on 8PM or peak hours when lines are tied up."
+  - "No time" → "Just dropping a link for when you're free. What email?"
+- Auto-refresh stats every 30 seconds
 
-- Auto-refresh every 30 seconds (stats + callback reminders)
-
-=== 4. AUTO-REFRESH admin.html ===
-- Overview tab refreshes every 60 seconds
-- Call Recordings tab refreshes every 30 seconds
+=== 5. AUTO-REFRESH ===
+- admin.html Overview tab: every 60 seconds
 
 === CRITICAL ===
 - Dark cyberpunk theme: bg=#02040a, panel=#07101b, line=#173653, text=#e8f7ff, cyan=#31d7ff, green=#2dff9a, amber=#ffd166, red=#ff416d
-- Mobile-first: 44px min tap targets, horizontal scroll tables, responsive grid
+- Mobile-first: 44px min tap targets, horizontal scroll tables, responsive grid (860px and 520px breakpoints)
 - All API calls use existing req() function pattern
 - Do NOT change backend files
 - After each change: curl -s http://127.0.0.1:8650/ should return 200 with HTML
-- Push to git when done: cd ~/leadrescuepro_ops/dashboard_backend && git add static/ && git commit -m "dashboard: full lifecycle pipeline" && git push
+- Push to git when done: cd ~/leadrescuepro_ops/dashboard_backend && git add static/ && git commit -m "dashboard: full lifecycle with profit tracking" && git push
+- If server needs restart: cd ~/leadrescuepro_ops/dashboard_backend && python3 main.py
 
-DO NOT STOP until admin.html has 10 tabs total (including the 4 new ones), caller.html has callback reminders + script modal, and curl tests confirm both pages load 200.
+DO NOT STOP until admin has 11 tabs (6 existing + 5 new = 11 total), caller has callback reminders + script modal, curl tests pass, and git push succeeds.
