@@ -518,6 +518,13 @@
       padding: 1rem;
     }
 
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
     .file-entry {
       display: flex;
       justify-content: space-between;
@@ -852,9 +859,14 @@
             <h3>File Browser</h3>
             <div class="field">
               <label for="fileBrowserPath">Path</label>
-              <input id="fileBrowserPath" value=".">
+              <input id="fileBrowserPath" placeholder="Project root">
+            </div>
+            <div class="button-row">
+              <button id="fileProjectRoot" class="btn" type="button">Project Root</button>
+              <button id="fileHermesRoot" class="btn" type="button">Hermes Root</button>
             </div>
             <button id="fileBrowserGo" class="btn primary" type="button">Open Path</button>
+            <div id="fileAllowedRoots" class="muted" style="margin-top:0.75rem;"></div>
             <div id="fileBrowserMessage" class="msg"></div>
           </article>
           <article class="card span-8">
@@ -913,7 +925,7 @@
       ["filebrowser", "File Browser", "Browse LeadRescuePro and Hermes files.", "admin"],
       ["terminal", "Terminal", "Run safe non-interactive commands.", "admin"]
     ];
-    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [], callers: [], hermesChat: [], currentFilePath: "." };
+    let state = { token: localStorage.getItem(TOKEN_KEY), user: JSON.parse(localStorage.getItem(USER_KEY) || "null"), prospects: [], callers: [], hermesChat: [], currentFilePath: "", fileRoots: {} };
 
     const $ = (id) => document.getElementById(id);
     const money = (n) => "$" + Number(n || 0).toLocaleString();
@@ -944,11 +956,15 @@
       if (state.token) headers.Authorization = "Bearer " + state.token;
       if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
       const res = await fetch(API_BASE + path, { ...options, headers });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         clearSession();
         throw new Error("Session expired. Log in again.");
       }
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        const detail = typeof errorBody.detail === "string" ? errorBody.detail : (errorBody.detail?.message || JSON.stringify(errorBody.detail || errorBody));
+        throw new Error(detail || res.statusText);
+      }
       if ($("apiStatus")) $("apiStatus").textContent = "API online";
       return res.json();
     }
@@ -1258,12 +1274,14 @@
       $("hermesLogOutput").textContent = (logs.lines || []).join("\n") || "No Hermes log lines found.";
     }
 
-    async function loadFileBrowser(path = state.currentFilePath || ".") {
+    async function loadFileBrowser(path = state.currentFilePath || "") {
       if (state.user?.role !== "admin") return;
-      state.currentFilePath = path;
-      $("fileBrowserPath").value = path;
       $("fileBrowserMessage").textContent = "Loading...";
       const data = await api(`/hermes/files?path=${encodeURIComponent(path)}`);
+      state.currentFilePath = data.path || path;
+      state.fileRoots = data.allowed_roots || state.fileRoots || {};
+      $("fileBrowserPath").value = data.path || path;
+      $("fileAllowedRoots").textContent = state.fileRoots.project && state.fileRoots.hermes ? `Project: ${state.fileRoots.project}  |  Hermes: ${state.fileRoots.hermes}` : "";
       $("fileBrowserMessage").textContent = "";
       $("fileBrowserTitle").textContent = data.path || path;
       $("fileBrowserMeta").textContent = data.is_dir ? `${(data.entries || []).length} entries` : formatBytes(data.size);
@@ -1317,7 +1335,21 @@
     });
 
     $("fileBrowserGo").addEventListener("click", () => {
-      loadFileBrowser($("fileBrowserPath").value || ".").catch(err => {
+      loadFileBrowser($("fileBrowserPath").value || "").catch(err => {
+        $("fileBrowserMessage").textContent = err.message;
+        notify(err.message);
+      });
+    });
+
+    $("fileProjectRoot").addEventListener("click", () => {
+      loadFileBrowser(state.fileRoots.project || "").catch(err => {
+        $("fileBrowserMessage").textContent = err.message;
+        notify(err.message);
+      });
+    });
+
+    $("fileHermesRoot").addEventListener("click", () => {
+      loadFileBrowser(state.fileRoots.hermes || "~/.hermes").catch(err => {
         $("fileBrowserMessage").textContent = err.message;
         notify(err.message);
       });
@@ -1340,8 +1372,9 @@
         $("terminalMeta").textContent = data.cwd || "cwd";
         $("terminalOutput").textContent = [data.stdout, data.stderr].filter(Boolean).join("\n") || "Command produced no output.";
       } catch (err) {
+        const message = err.message.includes("Shell operators") ? `${err.message}\n\nTip: run the command without pipes or chaining; use the File Browser for reading file contents.` : err.message;
         $("terminalMessage").textContent = err.message;
-        $("terminalOutput").textContent = err.message;
+        $("terminalOutput").textContent = message;
         notify(err.message);
       }
     });

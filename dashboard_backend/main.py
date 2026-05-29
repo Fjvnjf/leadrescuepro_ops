@@ -221,6 +221,17 @@ def hermes_tables(conn):
 def hermes_table_columns(conn, table_name):
     return {row[1] for row in conn.execute(f"pragma table_info({table_name})").fetchall()}
 
+def hermes_allowed_file_roots():
+    return {
+        "project": str(PROJECT_DIR.resolve()),
+        "hermes": str(HERMES_HOME.resolve()),
+    }
+
+def is_allowed_browser_path(path: Path):
+    allowed_roots = [Path(root).resolve() for root in hermes_allowed_file_roots().values()]
+    resolved = path.resolve()
+    return any(resolved == root or root in resolved.parents for root in allowed_roots)
+
 def parse_skill_file(path: Path):
     text_body = path.read_text(errors="ignore")
     lines = [line.strip() for line in text_body.splitlines()]
@@ -250,9 +261,15 @@ def resolve_browser_path(raw_path: str | None):
     if not expanded.is_absolute():
         expanded = base / expanded
     resolved = expanded.resolve()
-    allowed_roots = [base, HERMES_HOME.resolve()]
-    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
-        raise HTTPException(status_code=403, detail="Path is outside allowed dashboard roots")
+    if not is_allowed_browser_path(resolved):
+        roots = hermes_allowed_file_roots()
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Path is outside the dashboard file browser roots. "
+                f"Use the project root ({roots['project']}) or Hermes root ({roots['hermes']})."
+            ),
+        )
     return resolved
 
 def safe_terminal_cwd(raw_cwd: str | None):
@@ -268,7 +285,13 @@ def validate_terminal_command(command: str):
     banned_tokens = {"sudo", "su", "ssh", "scp", "sftp", "vim", "vi", "nano", "less", "more", "top", "htop", "python", "python3", "node", "npm", "npx", "bash", "zsh", "sh"}
     shell_tokens = {"|", ">", "<", "&&", "||", ";", "`", "$("}
     if any(token in command for token in shell_tokens):
-        raise HTTPException(status_code=400, detail="Shell operators are not allowed")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Shell operators are blocked for safety. Run one non-interactive command at a time, "
+                "for example: ls -la /Users/fahim/Desktop/leadrescuepro_ops"
+            ),
+        )
     parts = shlex.split(command)
     if not parts:
         raise HTTPException(status_code=400, detail="command required")
@@ -1456,8 +1479,10 @@ def hermes_skills(user: User = Depends(require_admin)):
 @app.get("/api/hermes/files")
 def hermes_files(path: str = Query(None), user: User = Depends(require_admin)):
     resolved = resolve_browser_path(path)
+    allowed_roots = hermes_allowed_file_roots()
     if not resolved.exists():
         raise HTTPException(status_code=404, detail="Path not found")
+    parent = str(resolved.parent) if is_allowed_browser_path(resolved.parent) else ""
     if resolved.is_dir():
         entries = []
         for child in sorted(resolved.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
@@ -1474,17 +1499,18 @@ def hermes_files(path: str = Query(None), user: User = Depends(require_admin)):
                 "size": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
             })
-        return {"path": str(resolved), "parent": str(resolved.parent), "is_dir": True, "entries": entries}
+        return {"path": str(resolved), "parent": parent, "is_dir": True, "entries": entries, "allowed_roots": allowed_roots}
     text_content = resolved.read_text(errors="ignore")
     max_chars = 200_000
     return {
         "path": str(resolved),
-        "parent": str(resolved.parent),
+        "parent": parent,
         "is_dir": False,
         "size": resolved.stat().st_size,
         "modified_at": file_mtime_iso(resolved),
         "content": text_content[:max_chars],
         "truncated": len(text_content) > max_chars,
+        "allowed_roots": allowed_roots,
     }
 
 @app.get("/api/hermes/logs")
