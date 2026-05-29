@@ -50,7 +50,7 @@ app.add_middleware(
         "https://fjvnjf.github.io",
         "https://fjvnjf.github.io/lrp-dashboard-frontend",
         "https://lrp-dash.loca.lt",
-        "https://detector-lip-rear-music.trycloudflare.com",
+        "https://postal-configurations-coated-hats.trycloudflare.com",
         "http://localhost:8650",
         "http://127.0.0.1:8650",
     ],
@@ -1187,7 +1187,7 @@ def hermes_status(db: Session = Depends(get_db), user: User = Depends(require_ad
         cron_output = f"crontab unavailable: {exc}"
     hermes_reddit_count = db.query(Prospect).filter(Prospect.source == "hermes_reddit").count()
     scraped_count = db.query(Prospect).filter(Prospect.source == "scraped").count()
-    tunnel_url = "https://detector-lip-rear-music.trycloudflare.com"
+    tunnel_url = "https://postal-configurations-coated-hats.trycloudflare.com"
     for path in [PROJECT_DIR / "docs/dashboard_tunnel_url.txt", PROJECT_DIR / "docs/tunnel_url.txt"]:
         if path.exists():
             candidate_url = path.read_text(errors="ignore").strip()
