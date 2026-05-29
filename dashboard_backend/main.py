@@ -60,8 +60,6 @@ app.add_middleware(
     allow_origins=[
         "https://fjvnjf.github.io",
         "https://fjvnjf.github.io/lrp-dashboard-frontend",
-        "https://lrp-dash.loca.lt",
-        "https://postal-configurations-coated-hats.trycloudflare.com",
         "http://localhost:8650",
         "http://127.0.0.1:8650",
     ],
@@ -283,13 +281,13 @@ def validate_terminal_command(command: str):
     if not command:
         raise HTTPException(status_code=400, detail="command required")
     banned_tokens = {"sudo", "su", "ssh", "scp", "sftp", "vim", "vi", "nano", "less", "more", "top", "htop", "python", "python3", "node", "npm", "npx", "bash", "zsh", "sh"}
-    shell_tokens = {"|", ">", "<", "&&", "||", ";", "`", "$("}
+    shell_tokens = {">", "<", "&&", "||", ";", "`", "$("}
     if any(token in command for token in shell_tokens):
         raise HTTPException(
             status_code=400,
             detail=(
                 "Shell operators are blocked for safety. Run one non-interactive command at a time, "
-                "for example: ls -la /Users/fahim/Desktop/leadrescuepro_ops"
+                f"for example: ls -la {PROJECT_DIR}"
             ),
         )
     parts = shlex.split(command)

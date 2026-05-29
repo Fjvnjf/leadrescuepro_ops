@@ -10,8 +10,9 @@
   <script>
     window.LRP_DASHBOARD_CONFIG = {
       // Update this whenever the public API tunnel changes.
-      DASHBOARD_TUNNEL_URL: "https://long-tagged-fixtures-forge.trycloudflare.com"
+      DASHBOARD_TUNNEL_URL: "https://gage-aug-sofa-bicycle.trycloudflare.com"
     };
+    const DASHBOARD_TUNNEL_URL = window.LRP_DASHBOARD_CONFIG.DASHBOARD_TUNNEL_URL;
   </script>
   <style>
     :root {
@@ -859,13 +860,13 @@
             <h3>File Browser</h3>
             <div class="field">
               <label for="fileBrowserPath">Path</label>
-              <input id="fileBrowserPath" placeholder="Project root">
+              <input id="fileBrowserPath" value="." placeholder="Project root">
             </div>
             <div class="button-row">
+              <button id="fileBrowserGo" class="btn primary" type="button">Browse</button>
               <button id="fileProjectRoot" class="btn" type="button">Project Root</button>
               <button id="fileHermesRoot" class="btn" type="button">Hermes Root</button>
             </div>
-            <button id="fileBrowserGo" class="btn primary" type="button">Open Path</button>
             <div id="fileAllowedRoots" class="muted" style="margin-top:0.75rem;"></div>
             <div id="fileBrowserMessage" class="msg"></div>
           </article>
@@ -886,7 +887,7 @@
             <h3>Terminal</h3>
             <div class="form-grid">
               <div class="field"><label for="terminalCommand">Command</label><input id="terminalCommand" name="command" value="ls -la" required></div>
-              <div class="field"><label for="terminalCwd">Working directory</label><input id="terminalCwd" name="cwd" value="."></div>
+              <div class="field"><label for="terminalCwd">Working directory</label><input id="terminalCwd" name="cwd" value="." placeholder="Project root by default"></div>
             </div>
             <button class="btn primary" type="submit">Run</button>
             <div id="terminalMessage" class="msg"></div>
