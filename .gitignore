@@ -12,6 +12,8 @@ data/uploads/*
 *.ogg
 static/tts_*
 tunnel.log
+cloudflared.log
+screenlog.*
 url_updater.log
 voice_bridge.log
 guardian.log
