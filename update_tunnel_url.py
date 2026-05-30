@@ -8,6 +8,10 @@ status_file = Path("/home/hermeseassistant/leadrescuepro_ops/tunnel_status.json"
 new_url = "https://arg-block-sociology-mercury.trycloudflare.com"
 url_file.write_text(new_url + "\n")
 
+# Also update the docs/ copy that GitHub Pages serves
+docs_file = Path(__file__).parent / "docs" / "tunnel_url.txt"
+docs_file.write_text(new_url + "\n")
+
 # Verify
 try:
     req = urllib.request.Request(new_url + "/api/health")
