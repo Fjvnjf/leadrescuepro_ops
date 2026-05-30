@@ -34,12 +34,15 @@ def start_server():
     )
 
 def start_tunnel():
-    log.info("Starting loca.lt tunnel...")
+    log.info("Starting loca.lt tunnel (IPv4) via tunnel_ipv4.js...")
+    # Kill any existing tunnel processes first
+    os.system("pkill -f tunnel_ipv4 2>/dev/null")
+    os.system("pkill -f localtunnel 2>/dev/null")
     subprocess.Popen(
-        ["npx", "localtunnel", "--port", str(PORT), "--subdomain", "lrp-dash"],
+        ["node", "tunnel_ipv4.js", str(PORT), "lrp-dash"],
         cwd=str(BASE),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=open(os.devnull, 'w'),
+        stderr=open(os.devnull, 'w'),
         start_new_session=True
     )
 
